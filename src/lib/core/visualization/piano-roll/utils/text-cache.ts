@@ -2,6 +2,7 @@
  * Text cache utility to avoid creating duplicate PIXI.Text objects in loops
  */
 import * as PIXI from "pixi.js";
+
 class TextCache {
   private cache = new Map<string, PIXI.Text>();
 
@@ -15,8 +16,8 @@ class TextCache {
     const key = this.createKey(text, style);
 
     if (!this.cache.has(key)) {
-      console.log(`New entry in text cache: ${text}`)
-        this.cache.set(key, new PIXI.Text({ text, style }));
+      console.debug(`New entry in text cache: ${text}`)
+      this.cache.set(key, new PIXI.Text({text, style}));
     }
 
     const cachedText = this.cache.get(key)!;
