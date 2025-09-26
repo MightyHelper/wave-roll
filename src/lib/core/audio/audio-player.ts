@@ -6,7 +6,7 @@
  */
 
 import { UnifiedAudioController } from './unified-audio-controller';
-import * as Tone from 'tone';
+import { getWaveRollAudioAPI } from "@/core/waveform/register";
 export class AudioPlayer {
   // Internal unified controller (the new system)
   private unifiedController: UnifiedAudioController;
@@ -22,29 +22,10 @@ export class AudioPlayer {
   public initPromise: Promise<void> | null = null;
   
   // Legacy managers (for compatibility - delegate to unified controller)
-  public samplerManager: any;
   public wavPlayerManager: any;
-  public transportSyncManager: any;
-  public loopManager: any;
-  
-  // Controllers (for compatibility)
-  public playbackController: any;
-  public audioSettingsController: any;
-  public fileAudioController: any;
-  public autoPauseController: any;
-  
+
   // Visual update callback
   public visualUpdateCallback: ((update: any) => void) | null = null;
-  
-  // Operation state
-  public operationState: any = {
-    lastOperation: 'none',
-    lastOperationTime: 0,
-    isOperationLocked: false,
-    currentGeneration: 0
-  };
-  
-  public isHandlingLoop: boolean = false;
   
   constructor(notes: any[], options: any, pianoRoll: any) {
     // console.log('[AudioPlayer] Initializing V2 with unified controller');
@@ -68,9 +49,6 @@ export class AudioPlayer {
     
     // Create compatibility state proxy
     this.state = this.createStateProxy();
-    
-    // Initialize legacy managers as proxies (for compatibility)
-    this.createLegacyManagers();
     
     // console.log('[AudioPlayer] V2 initialized with unified controller');
   }
@@ -133,55 +111,6 @@ export class AudioPlayer {
         return true;
       }
     });
-  }
-  
-  /**
-   * Create legacy manager proxies for compatibility
-   */
-  private createLegacyManagers(): void {
-    // These are just placeholder objects for compatibility
-    // Actual functionality is handled by unified controller
-    this.samplerManager = {
-      initialize: () => Promise.resolve(),
-      destroy: () => {},
-      setFileMute: (fileId: string, muted: boolean) => this.unifiedController.setMidiPlayerMute(fileId, muted),
-      setFileVolume: (fileId: string, volume: number) => this.unifiedController.setMidiPlayerVolume(fileId, volume),
-      setFilePan: (fileId: string, pan: number) => this.unifiedController.setMidiPlayerPan(fileId, pan),
-    };
-    
-    this.wavPlayerManager = {
-      setTransportSyncManager: () => {},
-      refreshAudioPlayers: () => {},
-      isAudioActive: () => true,
-      setFileMute: (playerId: string, muted: boolean) => this.unifiedController.setWavPlayerMute(playerId, muted),
-      setFileVolume: (playerId: string, volume: number) => this.unifiedController.setWavPlayerVolume(playerId, volume),
-      setFilePan: (playerId: string, pan: number) => this.unifiedController.setWavPlayerPan(playerId, pan),
-    };
-    
-    this.transportSyncManager = {
-      startSyncScheduler: () => {},
-      stopSyncScheduler: () => {},
-      updateSeekTimestamp: () => {},
-      enableSyncInspector: () => {},
-      disableSyncInspector: () => {},
-    };
-    
-    this.loopManager = {
-      loopStartVisual: 0,
-      loopEndVisual: 0,
-      getPartOffset: () => 0,
-    };
-    
-    // Controllers
-    this.playbackController = {
-      play: () => this.play(),
-      pause: () => this.pause(),
-      seek: (time: number) => this.seek(time),
-    };
-    
-    this.audioSettingsController = {};
-    this.fileAudioController = {};
-    this.autoPauseController = {};
   }
   
   /**
@@ -296,15 +225,6 @@ export class AudioPlayer {
   }
 
   /**
-   * Update baseline/original tempo used as 100% reference.
-   */
-  public setOriginalTempo(bpm: number): void {
-    try {
-      this.unifiedController.setOriginalTempo(bpm);
-    } catch {}
-  }
-  
-  /**
    * Set loop points (A-B) with optional position preservation.
    * - Passing null,null clears loop and (optionally) preserves position.
    * - Passing null,B sets [0,B) as loop window.
@@ -396,7 +316,7 @@ export class AudioPlayer {
     try {
       if (typeof enabled === 'boolean') {
         // Use independent global repeat flag; leave loopMode for AB loop only
-        (this.unifiedController as any).isGlobalRepeat = !!enabled;
+        (this.unifiedController as any).isGlobalRepeat = enabled;
         return;
       }
 
@@ -459,25 +379,13 @@ export class AudioPlayer {
 
   /** Determine if the given id belongs to WAV registry */
   private isWavFileId(fileId: string): boolean {
-    try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => Array<{ id: string; type?: string }> } })._waveRollAudio;
-      const items = api?.getFiles?.() || [];
-      // Check if the file exists in WAV registry and verify type if available
-      const wavItem = items.find((it) => it.id === fileId);
-      if (wavItem) {
-        // If type field exists, use it for accurate detection
-        if (wavItem.type) {
-          return wavItem.type === 'audio' || wavItem.type === 'wav';
-        }
-        // If no type field, assume it's WAV since it's in the registry
-        return true;
-      }
-      // Fallback: check fileId pattern for common audio extensions
-      return fileId.includes('audio') || fileId.includes('.mp3') || fileId.includes('.wav');
-    } catch {
-      // Error fallback: check fileId pattern
-      return fileId.includes('audio') || fileId.includes('.mp3') || fileId.includes('.wav');
-    }
+    const api = getWaveRollAudioAPI();
+    const items = api?.getFiles?.() || [];
+    // Check if the file exists in WAV registry and verify type if available
+    const wavItem = items.find((it) => it.id === fileId);
+    if (wavItem) return true;
+    // Fallback: check fileId pattern for common audio extensions
+    return fileId.includes('audio') || fileId.includes('.mp3') || fileId.includes('.wav');
   }
   
   /**
@@ -499,90 +407,26 @@ export class AudioPlayer {
     this.visualUpdateCallback = callback;
     
     // Set the callback on UnifiedAudioController
-    this.unifiedController.setOnVisualUpdate((payload: any) => {
+    this.unifiedController.setOnVisualUpdate((payload: number) => {
       if (!this.visualUpdateCallback) return;
-      try {
-        // Support legacy numeric payloads and new object payloads
-        if (typeof payload === 'number') {
-          const state = this.unifiedController.getState();
-          this.visualUpdateCallback({
-            currentTime: payload,
-            duration: state.duration,
-            isPlaying: state.isPlaying,
-          });
-        } else {
-          this.visualUpdateCallback(payload);
-        }
-      } catch (e) {
-        console.error('[AudioPlayer] Visual update callback error:', e);
-      }
+      // Support legacy numeric payloads and new object payloads
+      const state = this.unifiedController.getState();
+      this.visualUpdateCallback({
+        currentTime: payload,
+        duration: state.duration,
+        isPlaying: state.isPlaying,
+      });
     });
   }
-  
-  /**
-   * Refresh audio players (compatibility)
-   */
-  public refreshAudioPlayers(): void {
-    // console.log('[AudioPlayer] V2 refreshing audio players (compatibility)');
-    // The unified controller handles this automatically
-  }
-  
-  // === Legacy compatibility methods ===
-  
-  public cleanup(): void {
-    // console.log('[AudioPlayer] V2 cleanup (compatibility)');
-  }
-  
-  public setupTransportCallbacks(): void {
-    // console.log('[AudioPlayer] V2 setup transport callbacks (compatibility)');
-  }
-  
-  public removeTransportCallbacks(): void {
-    // console.log('[AudioPlayer] V2 remove transport callbacks (compatibility)');
-  }
-  
-  public updateAllUI(): void {
-    // console.log('[AudioPlayer] V2 update all UI (compatibility)');
-  }
-  
-  public handleFileSettingsChange(): void {
-    // console.log('[AudioPlayer] V2 handle file settings change (compatibility)');
-  }
-  
-  public handlePlaybackEnd(): void {
-    // console.log('[AudioPlayer] V2 handle playback end (compatibility)');
-  }
-  
-  public maybeAutoPauseIfSilent(): void {
-    // console.log('[AudioPlayer] V2 maybe auto pause if silent (compatibility)');
-  }
-  
-  // Transport event handlers (compatibility)
-  public handleTransportStop = () => {
-    // console.log('[AudioPlayer] V2 transport stop');
-  };
-  
-  public handleTransportPause = () => {
-    // console.log('[AudioPlayer] V2 transport pause');
-  };
-  
-  public handleTransportLoop = () => {
-    // console.log('[AudioPlayer] V2 transport loop');
-  };
-  
   /**
    * Destroy and cleanup
    */
   public destroy(): void {
-    // console.log('[AudioPlayer] V2 destroying');
-    
     this.unifiedController.destroy();
     
     this.isInitialized = false;
     this.initPromise = null;
     this.visualUpdateCallback = null;
-    
-    // console.log('[AudioPlayer] V2 destroyed');
   }
 }
 
@@ -593,5 +437,4 @@ export function createAudioPlayer(notes: any[], options: any, pianoRoll: any): A
   return new AudioPlayer(notes, options, pianoRoll);
 }
 
-// Legacy compatibility exports
 export { AudioPlayer as AudioPlayerContainer };

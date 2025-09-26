@@ -1,6 +1,7 @@
 import { generateAudioFileId } from "@/lib/core/utils/id";
 import { COLOR_WAVEFORM } from "@/lib/core/constants";
 import type { PeakDatum, RegisteredAudio } from "./types";
+import { toNumberColor } from "@/components/player/wave-roll/evaluation/colors";
 
 class WaveRollAudioAPI {
   private items: RegisteredAudio[] = [];
@@ -82,7 +83,7 @@ class WaveRollAudioAPI {
 }
 
 
-function getWaveRollAudioAPI(): WaveRollAudioAPI {
+export function getWaveRollAudioAPI(): WaveRollAudioAPI {
   const w = globalThis as unknown as { _waveRollAudio?: WaveRollAudioAPI };
   if (!w._waveRollAudio) w._waveRollAudio = new WaveRollAudioAPI();
   return w._waveRollAudio;
@@ -101,7 +102,7 @@ export async function addAudioFileFromUrl(
     name: displayName || url.split("/").pop() || "Audio",
     url,
     // Default neutral, high-contrast waveform stroke
-    color: color ?? parseInt(COLOR_WAVEFORM.replace("#", ""), 16),
+    color: color ?? toNumberColor(COLOR_WAVEFORM),
     isVisible: true,
     isMuted: false,
     pan: 0,

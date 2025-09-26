@@ -8,6 +8,7 @@ import * as Tone from "tone";
 import { AudioFileInfo, AUDIO_CONSTANTS } from "../player-types";
 import { clamp } from "../../utils";
 import { toDb, fromDb, isSilentDb, clamp01, effectiveVolume, mixLinear } from "../utils";
+import { getWaveRollAudioAPI } from "@/core/waveform/register";
 
 export interface AudioPlayerEntry {
   player: Tone.Player;
@@ -77,10 +78,8 @@ export class WavPlayerManager {
    */
   setupAudioPlayersFromRegistry(state: { volume?: number; playbackRate?: number; isPlaying?: boolean; currentTime?: number }): void {
     try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => AudioFileInfo[] } })._waveRollAudio;
-      if (!api?.getFiles) return;
-
-      const items = api.getFiles() as AudioFileInfo[];
+      const api = getWaveRollAudioAPI();
+      const items = api.getFiles();
 
       // Clean up players for removed items
       this.audioPlayers.forEach((entry, id) => {
@@ -252,7 +251,7 @@ export class WavPlayerManager {
   isAudioActive(): boolean {
     // Prefer registry truth: any visible and unmuted item means audio should be active
     try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => AudioFileInfo[] } })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       const items = api?.getFiles?.() as AudioFileInfo[] | undefined;
       if (items && items.some((i) => i.isVisible && !i.isMuted)) {
         return true;
@@ -305,7 +304,7 @@ export class WavPlayerManager {
     // Ensure players exist for registry items before attempting to start
     try { this.setupAudioPlayersFromRegistry({}); } catch {}
 
-    const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => AudioFileInfo[] } })._waveRollAudio;
+    const api = getWaveRollAudioAPI();
     if (!api?.getFiles) return;
     const items = api.getFiles() as AudioFileInfo[];
 
@@ -503,7 +502,7 @@ export class WavPlayerManager {
 
     // Update registry if available
     try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => Array<{ id: string; volume?: number }> } })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       if (api?.getFiles) {
         const files = api.getFiles();
         const file = files.find((f) => f.id === fileId);
@@ -698,7 +697,7 @@ export class WavPlayerManager {
    */
   getMaxAudioDuration(): number {
     try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => AudioFileInfo[] } })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       if (!api?.getFiles) return 0;
 
       const items = api.getFiles() as AudioFileInfo[];
@@ -769,7 +768,7 @@ export class WavPlayerManager {
       // Ensure players reflect current registry
       this.setupAudioPlayersFromRegistry({});
 
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => AudioFileInfo[] } })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       const items = api?.getFiles?.() as AudioFileInfo[] | undefined;
       if (!items || items.length === 0) return false;
 
@@ -812,7 +811,7 @@ export class WavPlayerManager {
   areAllBuffersReady(): boolean {
     // Trust Tone.js to handle buffer loading internally
     // Just check if players exist for visible/unmuted files
-    const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => AudioFileInfo[] } })._waveRollAudio;
+    const api = getWaveRollAudioAPI();
     if (!api?.getFiles) return true; // No audio files means all are "ready"
     
     const items = api.getFiles() as AudioFileInfo[];
@@ -841,7 +840,7 @@ export class WavPlayerManager {
    */
   startActiveAudioAtSync(offsetSeconds: number, startAt: string | number = "+0"): void {
     try { this.setupAudioPlayersFromRegistry({}); } catch {}
-    const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => AudioFileInfo[] } })._waveRollAudio;
+    const api = getWaveRollAudioAPI();
     if (!api?.getFiles) return;
     const items = api.getFiles() as AudioFileInfo[];
     const targetStart = this.resolveStartAt(startAt);

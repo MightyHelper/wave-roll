@@ -165,7 +165,7 @@ export function createVolumeControlUI(
     const computeBothAllMuted = (): boolean => {
       try {
         const midiFiles = dependencies.midiManager?.getState?.()?.files || [];
-        const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => Array<{ id: string; isMuted?: boolean }> } })._waveRollAudio;
+        const api = getWaveRollAudioAPI();
         const wavs = api?.getFiles?.() || [];
         const midiAllMuted = midiFiles.length > 0 && midiFiles.every((f: any) => f?.isMuted === true);
         const wavAllMuted = wavs.length > 0 && wavs.every((w: any) => w?.isMuted === true);

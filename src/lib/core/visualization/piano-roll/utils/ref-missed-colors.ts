@@ -40,7 +40,7 @@ export function getRefMissedColor(
   const grayHex = getContrastingGray(refHex, 3.5); // Higher contrast for better visibility
   
   // Convert back to number for PIXI
-  return parseInt(grayHex.replace("#", ""), 16);
+  return toNumberColor(grayHex);
 }
 
 /**
@@ -109,7 +109,7 @@ export function getCachedContrastingGray(refColor: number): number {
   
   const refHex = "#" + refColor.toString(16).padStart(6, "0");
   const grayHex = getContrastingGray(refHex, 3.5);
-  const grayNum = parseInt(grayHex.replace("#", ""), 16);
+  const grayNum = toNumberColor(grayHex);
   
   contrastCache.set(refColor, grayNum);
   return grayNum;

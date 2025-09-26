@@ -5,19 +5,16 @@
 
 import { VolumeStateManager } from './utils';
 import * as Tone from 'tone';
+import { getWaveRollAudioAPI } from "@/core/waveform/register";
 
 export interface SilenceDetectorOptions {
   onSilenceDetected?: () => void;
   onSoundDetected?: () => void;
   autoResumeOnUnmute?: boolean;
 }
-
-type SourceType = 'file' | 'wav';
-
 export class SilenceDetector {
-  private fileVolumeManager: VolumeStateManager<string>;
-  private wavVolumeManager: VolumeStateManager<string>;
-  private masterVolume: number = 1.0;
+  private fileVolumeManager: VolumeStateManager;
+  private wavVolumeManager: VolumeStateManager;
   private wasPausedBySilence: boolean = false;
   private options: SilenceDetectorOptions;
   private midiManager: any | null = null;
@@ -26,7 +23,7 @@ export class SilenceDetector {
 
   constructor(options: SilenceDetectorOptions = {}) {
     this.options = options;
-    
+
     // Initialize volume managers without automatic handlers
     // We'll manually check for silence changes to have better control
     this.fileVolumeManager = new VolumeStateManager();
@@ -96,7 +93,6 @@ export class SilenceDetector {
    */
   public setMasterVolume(volume: number): void {
     const wasAllSilent = this.isAllSilent();
-    this.masterVolume = volume;
     this.fileVolumeManager.setMasterVolume(volume);
     this.wavVolumeManager.setMasterVolume(volume);
     const isAllSilent = this.isAllSilent();
@@ -109,7 +105,7 @@ export class SilenceDetector {
    */
   public checkSilence(midiManager?: any): void {
     const wasAllSilent = this.isAllSilent();
-    
+
     // Sync with MIDI manager if available
     if (midiManager) {
       this.syncFromMidiManager(midiManager);
@@ -118,19 +114,17 @@ export class SilenceDetector {
     }
 
     // Check WAV files from global audio object
-    const audioAPI = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => Array<{ id: string; isMuted: boolean }> } })._waveRollAudio;
-    if (audioAPI?.getFiles) {
-      const wavFiles = audioAPI.getFiles() || [];
-      wavFiles.forEach((wav) => {
-        const currentVol = this.wavVolumeManager.getVolume(wav.id);
-        const isMuted = currentVol === 0 || wav.isMuted === true;
-        this.wavVolumeManager.setMuted(wav.id, isMuted);
-        if (currentVol === undefined) {
-          this.wavVolumeManager.setVolume(wav.id, isMuted ? 0 : 1.0);
-        }
-      });
-    }
-    
+    const audioAPI = getWaveRollAudioAPI();
+    const wavFiles = audioAPI.getFiles() || [];
+    wavFiles.forEach((wav) => {
+      const currentVol = this.wavVolumeManager.getVolume(wav.id);
+      const isMuted = currentVol === 0 || wav.isMuted;
+      this.wavVolumeManager.setMuted(wav.id, isMuted);
+      if (currentVol === undefined) {
+        this.wavVolumeManager.setVolume(wav.id, isMuted ? 0 : 1.0);
+      }
+    });
+
     const isAllSilent = this.isAllSilent();
     this.handleSilenceChange(wasAllSilent, isAllSilent);
   }
@@ -150,7 +144,8 @@ export class SilenceDetector {
           this.fileVolumeManager.setVolume(file.id, isMuted ? 0 : 1.0);
         }
       });
-    } catch {}
+    } catch {
+    }
   }
 
   private syncFromMidiManagerIfAvailable(): void {
@@ -171,25 +166,26 @@ export class SilenceDetector {
           return false;
         }
       }
-    } catch {}
+    } catch {
+    }
 
     // Check if there are any audio sources at all
     const fileState = this.fileVolumeManager.getState();
     const wavState = this.wavVolumeManager.getState();
     const hasAnySources = fileState.sources.size > 0 || wavState.sources.size > 0;
-    
+
     if (!hasAnySources) {
-      return false; // No sources means not silent (nothing to pause)
+      return false; // No sources mean not silent (nothing to pause)
     }
 
     // Both managers must report all their sources as silent
     const filesAreSilent = this.fileVolumeManager.isAllSilent();
     const wavsAreSilent = this.wavVolumeManager.isAllSilent();
-    
+
     // But if one has no sources, that's OK - only check the one with sources
     const fileHasSources = fileState.sources.size > 0;
     const wavHasSources = wavState.sources.size > 0;
-    
+
     if (fileHasSources && wavHasSources) {
       return filesAreSilent && wavsAreSilent;
     } else if (fileHasSources) {
@@ -197,7 +193,7 @@ export class SilenceDetector {
     } else if (wavHasSources) {
       return wavsAreSilent;
     }
-    
+
     return false;
   }
 
@@ -210,7 +206,8 @@ export class SilenceDetector {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('wr-silence-changed', { detail: { isAllSilent } }));
       }
-    } catch {}
+    } catch {
+    }
     if (!wasAllSilent && isAllSilent) {
       // Debounce pause to avoid pausing during quick mute/unmute sequences
       if (this.pendingPauseTimer !== null) {
@@ -233,7 +230,8 @@ export class SilenceDetector {
           if (Tone.getTransport().state === 'started') {
             return;
           }
-        } catch {}
+        } catch {
+        }
         this.wasPausedBySilence = true;
         if (this.options.onSilenceDetected) {
           this.options.onSilenceDetected();
@@ -256,11 +254,6 @@ export class SilenceDetector {
     }
   }
 
-  /** Public accessor for effective silence state (for initial UI sync) */
-  public isEffectivelySilent(): boolean {
-    return this.isAllSilent();
-  }
-
   /**
    * External sanity check: detect any audible sources directly from providers.
    * Returns true if at least one source (MIDI or WAV) is currently unmuted/visible.
@@ -277,23 +270,14 @@ export class SilenceDetector {
       }
 
       // Check WAV registry
-      const audioAPI = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => Array<{ id: string; isMuted: boolean; isVisible: boolean }> } })._waveRollAudio;
+      const audioAPI = getWaveRollAudioAPI();
       if (audioAPI?.getFiles) {
         const wavFiles = audioAPI.getFiles() || [];
-        const anyAudibleWav = wavFiles.some((w) => w && w.isVisible && w.isMuted === false);
+        const anyAudibleWav = wavFiles.some((w) => w && w.isVisible && !w.isMuted);
         if (anyAudibleWav) return true;
       }
-    } catch {}
+    } catch {
+    }
     return false;
-  }
-
-  /**
-   * Reset the silence detector state
-   */
-  public reset(): void {
-    this.fileVolumeManager.clear();
-    this.wavVolumeManager.clear();
-    this.masterVolume = 1.0;
-    this.wasPausedBySilence = false;
   }
 }

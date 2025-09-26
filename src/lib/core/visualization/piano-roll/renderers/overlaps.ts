@@ -15,8 +15,6 @@ export function drawOverlapRegions(
   color: number = OVERLAP_COLOR,
   alpha: number = OVERLAP_ALPHA
 ): void {
-  if (!pianoRoll.overlapOverlay) return;
-
   const g = pianoRoll.overlapOverlay;
   g.clear();
 

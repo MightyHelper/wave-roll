@@ -1,12 +1,14 @@
 import { StateManager } from "@/core/state";
 import { FileManager } from "@/core/file";
 import { DEFAULT_SAMPLE_FILES, DEFAULT_SAMPLE_AUDIO_FILES } from "@/core/file/constants";
+import { getWaveRollAudioAPI } from "@/core/waveform/register";
 
 export class FileLoader {
   constructor(
     private stateManager: StateManager,
     private fileManager: FileManager
-  ) {}
+  ) {
+  }
 
   /**
    * Load sample MIDI files
@@ -36,31 +38,9 @@ export class FileLoader {
     try {
       // Load MIDI files
       if (midiFiles.length > 0) {
-        // console.log('[FileLoader] Loading MIDI files...');
         await this.fileManager.loadSampleFiles(midiFiles);
-        // console.log('[FileLoader] MIDI files loaded successfully');
-        
-        // Debug: Check MIDI data after loading
-        const midiState = this.fileManager.midiManager.getState();
-        // console.log('[FileLoader] MIDI Manager state after loading:', {
-        //   filesCount: midiState.files.length,
-        //   totalNotes: midiState.files.reduce((total, file) => total + (file.parsedData?.notes?.length || 0), 0),
-        //   files: midiState.files.map(f => ({
-        //     displayName: f.displayName,
-        //     notesCount: f.parsedData?.notes?.length || 0,
-        //     isVisible: f.isVisible,
-        //     isMuted: f.isMuted
-        //   }))
-        // });
       }
-
-      // Load audio files
-      if (audioFiles.length > 0) {
-        await this.fileManager.loadSampleAudioFiles(audioFiles);
-        // Check registry after loading
-        const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => any[] } })._waveRollAudio;
-        api?.getFiles?.();
-      }
+      if (audioFiles.length > 0) await this.fileManager.loadSampleAudioFiles(audioFiles);
 
       callbacks?.onComplete?.();
     } catch (error) {

@@ -3,22 +3,13 @@ import { PianoRoll } from "../piano-roll";
 import type { PianoRollAugments } from "../types-internal";
 import { NoteData } from "@/lib/midi/types";
 import type { OnsetMarkerShape, OnsetMarkerStyle } from "@/types";
-import {
-  COLOR_EVAL_EXCLUSIVE,
-  COLOR_EVAL_HIGHLIGHT,
-  GRAY_EVAL_AMBIGUOUS,
-  GRAY_EVAL_EXCLUSIVE,
-  GRAY_EVAL_INTERSECTION,
-} from "@/lib/core/constants";
+import { COLOR_EVAL_HIGHLIGHT } from "@/lib/core/constants";
+import { toNumberColor } from "@/components/player/wave-roll/evaluation/colors";
 
 // Cache for hatch textures keyed by orientation to avoid recreating
 let WR_HATCH_TEXTURE_CACHE: Partial<Record<"up" | "down", PIXI.Texture>> = {};
-
 // Subtle per-file pattern textures to improve CVD distinguishability
-let WR_PATTERN_TEXTURE_CACHE: Partial<
-  Record<"up" | "down" | "cross" | "dots", PIXI.Texture>
-> = {};
-
+let WR_PATTERN_TEXTURE_CACHE: Partial<Record<"up" | "down" | "cross" | "dots", PIXI.Texture>> = {};
 // Onset shape textures cached by shape+variant+stroke+color to avoid recreating
 let WR_ONSET_TEXTURE_CACHE: Record<string, PIXI.Texture> = {};
 
@@ -360,7 +351,7 @@ function handleSprites(pianoRoll: PianoRoll, baseTexture: PIXI.Texture<PIXI.Buff
     const overlay = new PIXI.TilingSprite({ texture: getHatchTexture("up"), width: 1, height: 1 });
     overlay.visible = false;
     overlay.alpha = 0.55;
-    overlay.tint = parseInt(COLOR_EVAL_HIGHLIGHT.replace("#", ""), 16);
+    overlay.tint = toNumberColor(COLOR_EVAL_HIGHLIGHT);
     pianoRoll.notesContainer.addChild(overlay);
     hatchSprites.push(overlay);
   }
@@ -399,9 +390,6 @@ function handleSprites(pianoRoll: PianoRoll, baseTexture: PIXI.Texture<PIXI.Buff
   }
 }
 
-function hashToHexColor(hashColor: string) {
-  return parseInt(hashColor.replace("#", ""), 16);
-}
 /**
  * Default Sprite-based note renderer with automatic batching.
  *

@@ -32,7 +32,7 @@ function contrastRatio(a: number, b: number): number {
 export function aaGrayFor(base: number): number {
   const baseHex = "#" + base.toString(16).padStart(6, "0");
   const grayHex = getContrastingGray(baseHex, 3.5);
-  return parseInt(grayHex.replace("#", ""), 16);
+  return toNumberColor(grayHex);
 }
 
 // Derive a dynamic, high-contrast alternative without assuming fixed hues

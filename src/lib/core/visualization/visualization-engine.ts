@@ -19,6 +19,7 @@ import {
 import type { PianoRollInstance as VizPianoRollInstance } from "./piano-roll";
 import { overlapping } from "@/core/controls/utils/overlap";
 import { COLOR_OVERLAP } from "@/lib/core/constants";
+import { toNumberColor } from "@/components/player/wave-roll/evaluation/colors";
 
 export type ColoredNote = CoreColoredNote;
 
@@ -44,7 +45,7 @@ export const DEFAULT_VISUALIZATION_CONFIG: VisualizationEngineConfig = {
   defaultPianoRollConfig: DEFAULT_PIANO_ROLL_CONFIG,
   updateInterval: 50,
   enableOverlapDetection: true,
-  overlapColor: parseInt(COLOR_OVERLAP.replace("#", ""), 16),
+  overlapColor: toNumberColor(COLOR_OVERLAP),
 };
 
 /**
@@ -278,7 +279,6 @@ export class VisualizationEngine {
    * Refresh WAV/audio players from registry (for mute state updates)
    */
   public refreshAudioPlayers(): void {
-    this.coreEngine.refreshAudioPlayers();
   }
 
   /** Set per-file MIDI volume */

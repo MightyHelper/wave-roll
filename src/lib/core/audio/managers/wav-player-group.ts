@@ -1,5 +1,6 @@
 import * as Tone from 'tone';
 import type { PlayerGroup, SynchronizationInfo } from '../master-clock';
+import { getWaveRollAudioAPI } from "@/core/waveform/register";
 
 /**
  * AudioFileInfo type definition
@@ -44,7 +45,6 @@ export class WavPlayerGroup implements PlayerGroup {
   private audioPlayers = new Map<string, AudioPlayerEntry>();
   private bufferLoadPromise: Promise<void> | null = null;
   private notifyBufferReady: (() => void) | null = null;
-  private activeAudioId: string | null = null;
   private lastStartGen: number | null = null;
   
   // Master volume (controlled from above)
@@ -68,7 +68,7 @@ export class WavPlayerGroup implements PlayerGroup {
    * Setup audio players
    */
   async setupAudioPlayersFromRegistry(options: any = {}): Promise<void> {
-    const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => AudioFileInfo[] } })._waveRollAudio;
+    const api = getWaveRollAudioAPI();
     if (!api?.getFiles) {
       // console.log('[WavPlayerGroup] Audio API not available');
       return;
@@ -199,7 +199,7 @@ export class WavPlayerGroup implements PlayerGroup {
   private areAllBuffersReady(): boolean {
     // Consider ready if either the player's buffer is loaded or the registry item has a decoded buffer
     try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => AudioFileInfo[] } })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       const items = api?.getFiles?.() as AudioFileInfo[] | undefined;
       for (const [id, entry] of this.audioPlayers) {
         const reg = items?.find((it) => it.id === id);
@@ -224,13 +224,13 @@ export class WavPlayerGroup implements PlayerGroup {
    */
   async startSynchronized(syncInfo: SynchronizationInfo): Promise<void> {
     // Dedupe: ignore duplicate start requests for the same generation
-    if (typeof syncInfo.generation === 'number') {
-      if (this.lastStartGen === syncInfo.generation) {
-        try { /* console.log('[SYNC][WavPlayerGroup] Duplicate start ignored for generation', syncInfo.generation); */ } catch {}
-        return;
+    if (this.lastStartGen === syncInfo.generation) {
+      try { /* console.log('[SYNC][WavPlayerGroup] Duplicate start ignored for generation', syncInfo.generation); */
+      } catch {
       }
-      this.lastStartGen = syncInfo.generation;
+      return;
     }
+    this.lastStartGen = syncInfo.generation;
     // console.log('[WavPlayerGroup] Starting synchronized playback', syncInfo);
     try {
       // console.log('[TEMPO][SYNC][WavPlayerGroup] startSynchronized', {
@@ -260,7 +260,7 @@ export class WavPlayerGroup implements PlayerGroup {
     }
     
     // Check if audio API is available
-    const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => AudioFileInfo[] } })._waveRollAudio;
+    const api = getWaveRollAudioAPI();
     if (!api?.getFiles) {
       console.warn('[WavPlayerGroup] Audio API not available');
       return;
@@ -288,8 +288,6 @@ export class WavPlayerGroup implements PlayerGroup {
       
       // Prevent ghost audio with generation token
       entry.startToken = (entry.startToken || 0) + 1;
-      const token = entry.startToken;
-      
       // Clear existing schedule
       if (entry.scheduledTimer) {
         clearTimeout(entry.scheduledTimer);
@@ -311,21 +309,18 @@ export class WavPlayerGroup implements PlayerGroup {
         
         // Calculate volume respecting per-entry mute only (UI is source of truth)
         const isMuted = entry.muted;
-        const finalVolume = this.masterVolume * this.mixGain * entry.volume * (isMuted ? 0 : 1);
-        entry.gate.gain.value = finalVolume;
+        entry.gate.gain.value = this.masterVolume * this.mixGain * entry.volume * (isMuted ? 0 : 1);
         
         // Compute safe offset within buffer duration (if known)
         const bufferDuration = (entry.player.buffer as any)?.duration ?? item.audioBuffer?.duration ?? 0;
         let offset = syncInfo.masterTime;
         if (bufferDuration && (offset < 0 || offset > bufferDuration - 0.001)) {
-          const clamped = Math.max(0, Math.min(bufferDuration - 0.001, offset));
           // console.log('[WavPlayerGroup] Clamping offset from', offset, 'to', clamped, '(bufferDuration=', bufferDuration, ')');
-          offset = clamped;
+          offset = Math.max(0, Math.min(bufferDuration - 0.001, offset));
         }
         
         // Align with Transport and compensate FX latency: subtract latency from offset
         // so audio content aligns with masterTime. Clamp to [0, bufferDuration).
-        const fxLatency = 0; // remove FX latency subtraction to avoid constant negative offset vs MIDI
         const adjustedOffset = Math.max(0, Math.min(
           bufferDuration > 0 ? bufferDuration - 0.001 : Number.POSITIVE_INFINITY,
           offset
@@ -343,7 +338,6 @@ export class WavPlayerGroup implements PlayerGroup {
           // });
         } catch {}
         entry.player.start(syncInfo.audioContextTime, adjustedOffset);
-        const tr = Tone.getTransport();
         // console.log('[WavPlayerGroup] Started', item.id, 'at anchor', syncInfo.audioContextTime, 'offset', adjustedOffset, 'transport.seconds(now)=', tr.seconds);
         entry.isStarted = true;
         startedCount++;
@@ -422,7 +416,6 @@ export class WavPlayerGroup implements PlayerGroup {
       }
     }
     try {
-      const tr = Tone.getTransport();
       // console.log('[TEMPO][WavPlayerGroup] Transport BPM now', tr.bpm.value);
     } catch {}
   }
@@ -552,19 +545,18 @@ export class WavPlayerGroup implements PlayerGroup {
     if (!entry) return;
 
     try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => AudioFileInfo[] } })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       const item = api?.getFiles?.()?.find((f) => f.id === playerId);
       if (!item) return;
 
-      const shouldPlay = !!item.isVisible && !entry.muted;
+      const shouldPlay = item.isVisible && !entry.muted;
       if (!shouldPlay) return;
       if (!entry.player.buffer?.loaded) return;
 
       if (!entry.isStarted) {
         const startAt = Tone.now() + lookahead;
         // Volume gate respects masterVolume * entry.volume (mute already applied)
-        const finalVolume = this.masterVolume * entry.volume;
-        entry.gate.gain.value = finalVolume;
+        entry.gate.gain.value = this.masterVolume * entry.volume;
         entry.player.start(startAt, masterTime);
         entry.isStarted = true;
         // Debug log
@@ -579,19 +571,18 @@ export class WavPlayerGroup implements PlayerGroup {
    */
   syncPendingPlayers(masterTime: number, lookahead: number = 0.03): void {
     try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => AudioFileInfo[] } })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       const items = api?.getFiles?.() || [];
       for (const [id, entry] of this.audioPlayers) {
         const item = items.find((f) => f.id === id);
         if (!item) continue;
-      const shouldPlay = !!item.isVisible && !entry.muted;
+      const shouldPlay = item.isVisible && !entry.muted;
         if (!shouldPlay) continue;
         if (entry.isStarted) continue;
         if (!entry.player.buffer?.loaded) continue;
 
         const startAt = Tone.now() + lookahead;
-        const finalVolume = this.masterVolume * entry.volume;
-        entry.gate.gain.value = finalVolume;
+        entry.gate.gain.value = this.masterVolume * entry.volume;
         entry.player.start(startAt, masterTime);
         entry.isStarted = true;
       }

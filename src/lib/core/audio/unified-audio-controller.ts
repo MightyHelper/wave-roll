@@ -2,6 +2,7 @@ import * as Tone from 'tone';
 import { AudioMasterClock } from './master-clock';
 import { WavPlayerGroup } from './managers/wav-player-group';
 import { MidiPlayerGroup } from './managers/midi-player-group';
+import { getWaveRollAudioAPI } from "@/core/waveform/register";
 
 /**
  * Unified Audio Controller
@@ -79,21 +80,13 @@ export class UnifiedAudioController {
    * Falls back to master clock's totalTime when registry is unavailable.
    */
   private getEffectiveTotalTime(): number {
-    let duration = this.masterClock.state.totalTime || 0;
-    try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => Array<{ isVisible?: boolean; isMuted?: boolean; volume?: number; audioBuffer?: { duration?: number } }> } })._waveRollAudio;
-      const items = api?.getFiles?.();
-      if (items && Array.isArray(items)) {
-        const audioDurations = items
-          .filter((i) => i && (i.isVisible !== false) && (i.isMuted !== true) && (i.volume === undefined || i.volume > 0))
-          .map((i) => (i?.audioBuffer?.duration ?? 0))
-          .filter((d) => typeof d === 'number' && d > 0);
-        if (audioDurations.length > 0) {
-          duration = Math.max(duration, ...audioDurations);
-        }
-      }
-    } catch {}
-    return duration;
+    const api = getWaveRollAudioAPI();
+    const items = api.getFiles();
+    return items
+      .filter((i) => i.isVisible && !i.isMuted && (i?.volume ?? 1) > 0)
+      .map((i) => (i?.audioBuffer?.duration ?? 0))
+      .filter((d) => d > 0)
+      .reduce((a, b) => Math.max(a, b), this.masterClock.state.totalTime || 0);
   }
 
   /**
@@ -132,7 +125,7 @@ export class UnifiedAudioController {
       }
       
       // Check WAV audio registry before initialization
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => any[] } })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       if (api?.getFiles) {
         const files = api.getFiles();
         // console.log('[UnifiedAudioController] WAV registry found:', files.length, 'files:', files.map(f => f.displayName || f.id));

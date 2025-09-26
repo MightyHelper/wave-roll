@@ -3,6 +3,7 @@ import { COLOR_PLAYHEAD } from "@/lib/core/constants";
 import { UIElements, UIComponentDependencies } from "@/lib/components/ui";
 import { WaveRollPlayerOptions } from "./types";
 import { FileToggleManager } from "@/lib/components/ui/file/toggle-manager";
+import { toNumberColor } from "@/components/player/wave-roll/evaluation/colors";
 // NOTE: setupUI is intentionally imported in player after piano-roll initialisation.
 // createAudioPlayer is not required here.
 
@@ -49,7 +50,7 @@ export function createDefaultConfig(): WaveRollPlayerOptions {
       height: 400,
       backgroundColor: 0xf8f9fa,
       // Use theme playhead color for better visibility
-      playheadColor: parseInt(COLOR_PLAYHEAD.replace("#", ""), 16),
+      playheadColor: toNumberColor(COLOR_PLAYHEAD),
       showPianoKeys: true,
       noteRange: { min: 21, max: 108 },
       minorTimeStep: 0.1,

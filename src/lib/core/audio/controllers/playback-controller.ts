@@ -290,7 +290,7 @@ export class PlaybackController {
     // Clamp and convert time against max(MIDI, WAV) so WAV tails are seekable
     let maxWav = 0;
     try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => Array<{ audioBuffer?: AudioBuffer }> } })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       const items = api?.getFiles?.() || [];
       const ds = items.map((i) => i.audioBuffer?.duration || 0).filter((d) => d > 0);
       maxWav = ds.length > 0 ? Math.max(...ds) : 0;

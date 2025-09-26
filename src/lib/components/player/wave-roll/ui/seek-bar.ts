@@ -3,6 +3,7 @@ import { AudioPlayerContainer } from "@/lib/core/audio/audio-player";
 import { updateLoopDisplay } from "./loop-display";
 import { COLOR_A, COLOR_B } from "@/lib/core/constants";
 import { createMarker } from "./marker";
+import { getWaveRollAudioAPI } from "@/core/waveform/register";
 
 /** Loop window expressed in percentage (0-100) relative to the full track. */
 export interface LoopWindow {
@@ -37,7 +38,7 @@ export function createSeekBar(deps: SeekBarDeps): SeekBarInstance {
     // Pull WAV max duration from global registry if present
     let wavMax = 0;
     try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => Array<{ audioBuffer?: AudioBuffer }> } })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       const files = api?.getFiles?.() || [];
       const ds = files.map((f) => f.audioBuffer?.duration || 0).filter((d) => d > 0);
       wavMax = ds.length > 0 ? Math.max(...ds) : 0;
@@ -50,7 +51,7 @@ export function createSeekBar(deps: SeekBarDeps): SeekBarInstance {
   const calculateRawDuration = (midiDuration: number): number => {
     let wavMax = 0;
     try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => Array<{ audioBuffer?: AudioBuffer; isVisible?: boolean; isMuted?: boolean; volume?: number }> } })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       const files = api?.getFiles?.() || [];
       const ds = files
         // Only consider active (visible & unmuted & volume>0 if provided)

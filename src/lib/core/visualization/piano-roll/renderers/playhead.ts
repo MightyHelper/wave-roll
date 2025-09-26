@@ -1,24 +1,13 @@
 import { PianoRoll } from "../piano-roll";
 import { COLOR_PLAYHEAD, COLOR_PLAYHEAD_OUTLINE } from "@/lib/core/constants";
+import { toNumberColor } from "@/components/player/wave-roll/evaluation/colors";
 
 export function renderPlayhead(pianoRoll: PianoRoll): void {
-  // console.log(
-  //   "[renderPlayhead] panX",
-  //   pianoRoll.state.panX,
-  //   "playheadX",
-  //   pianoRoll.playheadX
-  // );
   pianoRoll.playheadLine.clear();
 
   const pianoKeysOffset = pianoRoll.options.showPianoKeys ? 60 : 0;
   const pxPerSecond = pianoRoll.timeScale(1) * pianoRoll.state.zoomX;
-  const timeOffsetPx = pianoRoll.state.currentTime * pxPerSecond;
 
-  // console.log(
-  //   "%c[renderPlayhead] timeOffsetPx:",
-  //   "color: blue; font-weight: bold;",
-  //   timeOffsetPx
-  // );
   // Keep playhead fixed right after the piano-keys column so the
   // underlying note layer scrolls while the playhead stays in place.
   const playheadX = pianoKeysOffset;
@@ -28,8 +17,8 @@ export function renderPlayhead(pianoRoll: PianoRoll): void {
 
   const coreColor =
     pianoRoll.options.playheadColor ??
-    parseInt(COLOR_PLAYHEAD.replace("#", ""), 16);
-  const haloColor = parseInt(COLOR_PLAYHEAD_OUTLINE.replace("#", ""), 16);
+    toNumberColor(COLOR_PLAYHEAD);
+  const haloColor = toNumberColor(COLOR_PLAYHEAD_OUTLINE);
 
   // Thicker dual-stroke vertical line (better visibility)
   pianoRoll.playheadLine.moveTo(playheadX, 0);
@@ -48,6 +37,7 @@ export function renderPlayhead(pianoRoll: PianoRoll): void {
   pianoRoll.playheadLine.moveTo(playheadX - tickHalf, 0);
   pianoRoll.playheadLine.lineTo(playheadX + tickHalf, 0);
   pianoRoll.playheadLine.stroke({ width: 3, color: coreColor, alpha: 1 });
+
   // Bottom tick (halo + core)
   const h = pianoRoll.options.height;
   pianoRoll.playheadLine.moveTo(playheadX - tickHalf - 1, h);
@@ -60,16 +50,4 @@ export function renderPlayhead(pianoRoll: PianoRoll): void {
   // Ensure playhead is visible and on top
   pianoRoll.playheadLine.visible = true;
   pianoRoll.playheadLine.zIndex = 1000;
-
-  // Force container to re-sort children by zIndex
-  pianoRoll.container.sortChildren();
-
-  // console.log("[playhead]", {
-  //   x: playheadX,
-  //   phase: timeOffsetPx <= playheadX ? "moving" : "fixed",
-  //   height: pianoRoll.options.height,
-  //   currentTime: pianoRoll.state.currentTime,
-  //   visible: pianoRoll.playheadLine.visible,
-  //   color: "0xff0000",
-  // });
 }

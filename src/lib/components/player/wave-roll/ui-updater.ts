@@ -31,7 +31,7 @@ export class UIUpdater {
     // Query global WAV registry for maximum buffer duration
     let wavMax = 0;
     try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => Array<{ audioBuffer?: AudioBuffer; isVisible?: boolean; isMuted?: boolean; volume?: number }> } })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       const files = api?.getFiles?.() || [];
       const durations = files
         // Only consider active (visible & unmuted & volume>0 if provided)

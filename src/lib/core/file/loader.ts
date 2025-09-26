@@ -81,6 +81,7 @@ export async function loadFile(
 }
 /**
  * Load multiple MIDI files
+ * @param fileManager
  * @param files - Array of File objects to load
  * @param options - Loading options
  * @returns Promise that resolves to array of loaded file IDs

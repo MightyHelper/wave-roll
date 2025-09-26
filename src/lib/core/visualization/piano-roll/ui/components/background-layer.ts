@@ -128,7 +128,7 @@ export class BackgroundLayer extends PIXI.Container {
 
     // Waveform overlay band
     try {
-      const api = (globalThis as unknown as { _waveRollAudio?: WaveRollAudioAPI })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       if (!api?.getVisiblePeaks) return;
       const peaksPayload = api.getVisiblePeaks();
       if (!(peaksPayload && peaksPayload.length > 0)) return;

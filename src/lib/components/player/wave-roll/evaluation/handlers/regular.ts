@@ -60,7 +60,7 @@ export function handleRegular(params: RegularParams): boolean {
     const ambRanges = (ambiguousByRef.get(sourceIdx) || []).map(r => ({ start: r.start, end: r.end }));
     let pairIntersectColor = nonIntersectColor;
     if (useGrayGlobal) {
-      pairIntersectColor = parseInt(GRAY_EVAL_INTERSECTION.replace("#", ""), 16);
+      pairIntersectColor = toNumberColor(GRAY_EVAL_INTERSECTION);
     } else if (isExclusiveGlobal && isIntersectionOwn) {
       pairIntersectColor = mixColorsOklch(
         fileColor,
@@ -135,7 +135,7 @@ export function handleRegular(params: RegularParams): boolean {
 
     let pairIntersectColor = nonIntersectColor;
     if (useGrayGlobal) {
-      pairIntersectColor = parseInt(GRAY_EVAL_INTERSECTION.replace("#", ""), 16);
+      pairIntersectColor = toNumberColor(GRAY_EVAL_INTERSECTION);
     } else if (isExclusiveGlobal && isIntersectionOwn) {
       pairIntersectColor = mixColorsOklch(
         fileColor,

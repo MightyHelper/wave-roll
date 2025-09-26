@@ -47,7 +47,7 @@ export function createWaveListSection(
       input.style.cssText = "position:absolute;opacity:0;width:0;height:0;border:0;padding:0;";
       input.addEventListener("change", () => {
         const newHex = input.value;
-        const num = parseInt(newHex.replace("#", ""), 16);
+        const num = toNumberColor(newHex);
         api?.updateColor?.(a.id, num);
         colorBtn.style.background = newHex;
       });

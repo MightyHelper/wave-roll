@@ -66,7 +66,7 @@ export class TransportSyncManager {
   private getEffectiveDuration(): number {
     let duration = this.state.duration || 0;
     try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => Array<{ isVisible?: boolean; isMuted?: boolean; volume?: number; audioBuffer?: { duration?: number } }> } })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       const items = api?.getFiles?.();
       if (items && Array.isArray(items)) {
         const audioDurations = items

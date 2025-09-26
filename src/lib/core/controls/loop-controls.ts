@@ -283,7 +283,7 @@ export function createCoreLoopControls(
     const midiDur = state.duration || 0;
     let wavMax = 0;
     try {
-      const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => Array<{ audioBuffer?: AudioBuffer }> } })._waveRollAudio;
+      const api = getWaveRollAudioAPI();
       const files = api?.getFiles?.() || [];
       const durations = files.map((f) => f.audioBuffer?.duration || 0).filter((d) => d > 0);
       wavMax = durations.length > 0 ? Math.max(...durations) : 0;

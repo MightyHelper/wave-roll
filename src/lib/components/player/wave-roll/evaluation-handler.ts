@@ -133,7 +133,7 @@ export class EvaluationHandler {
       let nonIntersectColor: number;
       if (isExclusiveGlobal) {
         if (useGrayGlobal) {
-          nonIntersectColor = parseInt(GRAY_EVAL_INTERSECTION.replace("#", ""), 16);
+          nonIntersectColor = toNumberColor(GRAY_EVAL_INTERSECTION);
         } else if (isIntersectionOwn) {
           nonIntersectColor = nonIntersectBase;
         } else {
@@ -208,14 +208,14 @@ export class EvaluationHandler {
             const blended = blendColorsAverage([refOwn, estOwn]);
             let ambColor: number;
             if (useGrayGlobal) {
-              ambColor = parseInt(GRAY_EVAL_AMBIGUOUS.replace("#", ""), 16);
+              ambColor = toNumberColor(GRAY_EVAL_AMBIGUOUS);
             } else {
               const refOwn2 = mixColorsOklch(refBase, HIGHLIGHT_ANCHOR_REF, HIGHLIGHT_BLEND_RATIO);
               const estOwn2 = mixColorsOklch(fileColor, HIGHLIGHT_ANCHOR_EST, HIGHLIGHT_BLEND_RATIO);
               const refHex = "#" + refOwn2.toString(16).padStart(6, "0");
               const compHex = "#" + estOwn2.toString(16).padStart(6, "0");
               const ambHex = getAmbiguousColor(refHex, compHex, 'color');
-              ambColor = parseInt(ambHex.replace("#", ""), 16);
+              ambColor = toNumberColor(ambHex);
               const blended2 = blendColorsAverage([refOwn2, estOwn2]);
               const overlap = mixColorsOklch(blended2, 0xffffff, 0.20);
               const [or, og, ob] = [ (overlap>>16)&0xff, (overlap>>8)&0xff, overlap&0xff ];

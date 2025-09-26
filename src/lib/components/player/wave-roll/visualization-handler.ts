@@ -115,7 +115,7 @@ export class VisualizationHandler {
           fileColors[f.id] =
             typeof f.color === "number"
               ? f.color
-              : parseInt(String(f.color).replace("#", ""), 16);
+              : toNumberColor(String(f.color));
         }
       });
 
@@ -145,7 +145,7 @@ export class VisualizationHandler {
           fileColors[f.id] ??
           (typeof f.color === "number"
             ? f.color
-            : parseInt(String(f.color ?? 0).replace("#", ""), 16));
+            : toNumberColor(String(f.color ?? 0)));
         fileInfoMap[f.id] = {
           name,
           fileName: f.fileName ?? "",
@@ -198,7 +198,7 @@ export class VisualizationHandler {
     const fallbackColors = [COLOR_PRIMARY, COLOR_A, COLOR_B];
 
     const toNumberColor = (c: string | number): number =>
-      typeof c === "number" ? c : parseInt(c.replace("#", ""), 16);
+      typeof c === "number" ? c : toNumberColor(c);
 
     // 1) Base notes -------------------------------------------------------
     const baseNotes: ColoredNote[] = [];
