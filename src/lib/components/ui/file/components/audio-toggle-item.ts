@@ -7,6 +7,7 @@ import { UIComponentDependencies } from "@/lib/components/ui";
 import { createIconButton } from "../../utils/icon-button";
 import { FileVolumeControl } from "../../controls/file-volume";
 import { ShapeRenderer } from "../utils/shape-renderer";
+import { getWaveRollAudioAPI } from "@/core/waveform/register";
 
 export interface AudioFileInfo {
   id: string;
@@ -92,7 +93,7 @@ export class AudioToggleItem {
       audio.isVisible ? PLAYER_ICONS.eye_open : PLAYER_ICONS.eye_closed,
       () => {
         // Toggle visibility through global API
-        const api = this.getAudioAPI();
+        const api = getWaveRollAudioAPI();
         api?.toggleVisibility?.(audio.id);
         
         // Refresh the container
@@ -141,7 +142,7 @@ export class AudioToggleItem {
       onVolumeChange: (volume) => {
         // Update mute state based on volume
         const shouldMute = volume === 0;
-        const api = this.getAudioAPI();
+        const api = getWaveRollAudioAPI();
         
         if (api?.getFiles) {
           const files = api.getFiles() || [];
@@ -215,7 +216,7 @@ export class AudioToggleItem {
       // Apply to v2 engine (per-file pan)
       dependencies.audioPlayer?.setFilePan?.(audio.id, pan);
       // Keep registry in sync for UI/state reflection
-      const api = this.getAudioAPI();
+      const api = getWaveRollAudioAPI();
       api?.setPan?.(audio.id, pan);
     });
 
@@ -224,17 +225,10 @@ export class AudioToggleItem {
       // Reset via v2 engine
       dependencies.audioPlayer?.setFilePan?.(audio.id, 0);
       // Sync registry as well
-      const api = this.getAudioAPI();
+      const api = getWaveRollAudioAPI();
       api?.setPan?.(audio.id, 0);
     });
 
     return { labelL, slider: panSlider, labelR };
-  }
-
-  /**
-   * Get global audio API
-   */
-  private static getAudioAPI(): any {
-    return (globalThis as any)._waveRollAudio;
   }
 }

@@ -34,8 +34,7 @@ export class LoopOverlayLayer extends PIXI.Container {
   }
 
   public render(pr: PianoRoll): void {
-    const transform = createCoordinateTransform(pr);
-
+    createCoordinateTransform(pr);
     // Clear previous
     this.labelContainer.removeChildren();
     this.overlay.clear();

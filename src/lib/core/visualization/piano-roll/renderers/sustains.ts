@@ -1,4 +1,3 @@
-import * as PIXI from "pixi.js";
 import { PianoRoll } from "../piano-roll";
 import type { PianoRollAugments } from "../types-internal";
 import { ControlChangeEvent } from "@/lib/midi/types";

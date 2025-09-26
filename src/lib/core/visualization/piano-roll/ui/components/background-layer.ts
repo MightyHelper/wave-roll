@@ -1,12 +1,12 @@
 import * as PIXI from "pixi.js";
 import type { PianoRoll } from "../../piano-roll";
-import type { WaveRollAudioAPI } from "@/lib/core/waveform/types";
 import {
   createCoordinateTransform,
   getVisibleTimeRange,
   DrawingPrimitives,
   textCache,
 } from "../../utils";
+import { getWaveRollAudioAPI } from "@/core/waveform/register";
 // Loop overlays are handled by LoopOverlayLayer now
 
 /**

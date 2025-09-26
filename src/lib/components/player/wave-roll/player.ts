@@ -34,6 +34,7 @@ import { VisualizationHandler } from "./visualization-handler";
 import { UIUpdater } from "./ui-updater";
 import { KeyboardHandler } from "./keyboard-handler";
 import { FileLoader } from "./file-loader";
+import { getWaveRollAudioAPI } from "@/core/waveform/register";
 
 /**
  * Demo for multiple MIDI files - Acts as orchestrator for extracted modules
@@ -108,10 +109,8 @@ export class WaveRollPlayer {
       const midiDur = st.duration || 0;
       let wavMax = 0;
       try {
-        const api = (globalThis as unknown as {
-          _waveRollAudio?: { getFiles?: () => Array<{ audioBuffer?: AudioBuffer }> }
-        })._waveRollAudio;
-        const files = api?.getFiles?.() || [];
+        const api = getWaveRollAudioAPI();
+        const files = api.getFiles();
         const durations = files.map((f) => f.audioBuffer?.duration || 0).filter((d) => d > 0);
         wavMax = durations.length > 0 ? Math.max(...durations) : 0;
       } catch {

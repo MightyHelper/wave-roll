@@ -5,12 +5,9 @@ import { toNumberColor } from "@/components/player/wave-roll/evaluation/colors";
 export function renderPlayhead(pianoRoll: PianoRoll): void {
   pianoRoll.playheadLine.clear();
 
-  const pianoKeysOffset = pianoRoll.options.showPianoKeys ? 60 : 0;
-  const pxPerSecond = pianoRoll.timeScale(1) * pianoRoll.state.zoomX;
-
   // Keep playhead fixed right after the piano-keys column so the
   // underlying note layer scrolls while the playhead stays in place.
-  const playheadX = pianoKeysOffset;
+  const playheadX = pianoRoll.options.showPianoKeys ? 60 : 0;
   // Optional debug: uncomment to let the playhead move with timeline
   // const playheadX = timeOffsetPx + pianoKeysOffset;
   pianoRoll.playheadX = playheadX;

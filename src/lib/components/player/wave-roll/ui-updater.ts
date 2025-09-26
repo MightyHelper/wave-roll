@@ -2,9 +2,9 @@ import { StateManager } from "@/core/state";
 import { VisualizationEngine } from "@/core/visualization";
 import { UIComponentDependencies } from "@/lib/components/ui";
 import { formatTime } from "@/core/utils";
-import { UILayoutManager } from "@/lib/components/ui/layout-manager";
 import { FileToggleManager } from "@/lib/components/ui/file/toggle-manager";
 import { MultiMidiManager } from "@/lib/core/midi/multi-midi-manager";
+import { getWaveRollAudioAPI } from "@/core/waveform/register";
 
 export class UIUpdater {
   private updateLoopId: number | null = null;
@@ -32,7 +32,7 @@ export class UIUpdater {
     let wavMax = 0;
     try {
       const api = getWaveRollAudioAPI();
-      const files = api?.getFiles?.() || [];
+      const files = api.getFiles();
       const durations = files
         // Only consider active (visible & unmuted & volume>0 if provided)
         .filter((f) => (f?.isVisible !== false) && (f?.isMuted !== true) && (f?.volume === undefined || f.volume > 0))
@@ -41,8 +41,7 @@ export class UIUpdater {
       wavMax = durations.length > 0 ? Math.max(...durations) : 0;
     } catch {}
 
-    const rawMax = Math.max(midiDuration, wavMax);
-    return rawMax;
+    return Math.max(midiDuration, wavMax);
   }
 
   /**

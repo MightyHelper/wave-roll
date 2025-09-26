@@ -7,7 +7,7 @@ import { NoteData } from "@/lib/midi/types";
 import { AudioPlayerState } from "@/core/audio";
 import {
   CorePlaybackEngine,
-  createCorePlaybackEngine,
+  createCorePlaybackEngine, PianoRollInstance,
   VisualUpdateParams as CoreVisualUpdateParams,
 } from "@/core/playback";
 import {
@@ -16,7 +16,6 @@ import {
   ColoredNote as CoreColoredNote,
   DEFAULT_PIANO_ROLL_CONFIG,
 } from "@/core/playback";
-import type { PianoRollInstance as VizPianoRollInstance } from "./piano-roll";
 import { overlapping } from "@/core/controls/utils/overlap";
 import { COLOR_OVERLAP } from "@/lib/core/constants";
 import { toNumberColor } from "@/components/player/wave-roll/evaluation/colors";
@@ -54,9 +53,6 @@ export const DEFAULT_VISUALIZATION_CONFIG: VisualizationEngineConfig = {
 export interface VisualUpdateParams extends CoreVisualUpdateParams {
   zoomLevel: number;
 }
-
-// Piano roll instance type alias for backward-compatibility
-export type PianoRollInstance = VizPianoRollInstance;
 
 /**
  * Main visualization engine class - Thin wrapper around CorePlaybackEngine
@@ -193,7 +189,7 @@ export class VisualizationEngine {
   public getPianoRollInstance(): PianoRollInstance | null {
     // PianoRollManager stores the object created by createPianoRoll(), which is the
     // visualizer-facing PianoRollInstance. Cast for ergonomic downstream typing.
-    return this.pianoRollManager.getPianoRollInstance() as unknown as PianoRollInstance | null;
+    return this.pianoRollManager.getPianoRollInstance();
   }
 
   /**

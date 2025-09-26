@@ -55,31 +55,3 @@ export interface PianoRollViewState {
   /** Last mouse/touch position for panning */
   lastPointerPos: { x: number; y: number };
 }
-
-export type PianoRollInstance = {
-  setNotes: (newNotes: NoteData[]) => void;
-  setTime: (time: number) => void;
-  zoomX: (factor: number) => void;
-  zoomY: (factor: number) => void;
-  pan: (deltaX: number, deltaY: number) => void;
-  resetView: () => void;
-  getState: () => PianoRollViewState;
-  destroy: () => void;
-  setTimeStep: (step: number) => void;
-  getTimeStep: () => number;
-  setLoopWindow?: (start: number | null, end: number | null) => void;
-  onTimeChange: (callback: (time: number) => void) => void;
-  setMinorTimeStep: (step: number) => void;
-  getMinorTimeStep: () => number;
-
-  /** Update the set of Control Change events (e.g., sustain pedal) */
-  setControlChanges?: (controlChanges: ControlChangeEvent[]) => void;
-
-  setOverlapRegions?: (overlaps: NoteInterval[]) => void;
-
-  /** Resize the visualizer to a new width/height */
-  resize: (width: number, height?: number) => void;
-  
-  /** Internal reference to the PianoRoll instance */
-  _instance?: PianoRoll;
-};

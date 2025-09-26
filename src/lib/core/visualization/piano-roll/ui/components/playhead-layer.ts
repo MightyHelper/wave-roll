@@ -23,9 +23,8 @@ export class PlayheadLayer extends PIXI.Container {
     const g = this.line;
     g.clear();
 
-    const pianoKeysOffset = pr.options.showPianoKeys ? 60 : 0;
     // Keep playhead fixed right after the piano-keys column
-    const playheadX = pianoKeysOffset;
+    const playheadX = pr.options.showPianoKeys ? 60 : 0;
     pr.playheadX = playheadX;
 
     const coreColor = pr.options.playheadColor ?? toNumberColor(COLOR_PLAYHEAD);

@@ -1,4 +1,6 @@
 import { UIComponentDependencies } from "../../types";
+import { getWaveRollAudioAPI } from "@/core/waveform/register";
+import { toNumberColor } from "@/components/player/wave-roll/evaluation/colors";
 
 export function createWaveListSection(
   deps: UIComponentDependencies
@@ -19,14 +21,10 @@ export function createWaveListSection(
     updateColor?: (id: string, color: number) => void;
     updateName?: (id: string, name: string) => void;
   };
-  const getWaveRollAudio = (): WaveRollAudioAPI | undefined => {
-    const w = globalThis as unknown as { _waveRollAudio?: WaveRollAudioAPI };
-    return w._waveRollAudio;
-  };
 
   const refresh = () => {
     list.innerHTML = "";
-    const api = getWaveRollAudio();
+    const api = getWaveRollAudioAPI();
     const files = (api?.getFiles?.() ?? []) as Array<{
       id: string;
       color: number;

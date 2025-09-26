@@ -8,6 +8,7 @@ import { UIComponentDependencies } from "@/lib/components/ui";
 import { FileToggleItem } from "./components/file-toggle-item";
 import { AudioToggleItem, AudioFileInfo } from "./components/audio-toggle-item";
 import { EvaluationControls } from "./components/evaluation-controls";
+import { getWaveRollAudioAPI } from "@/core/waveform/register";
 
 /**
  * Manages file visibility and per-file audio controls.
@@ -250,9 +251,9 @@ export class FileToggleManager {
 
     // Get file counts
     const midiCount = dependencies.midiManager.getState().files.length;
-    const audioApi = (globalThis as any)._waveRollAudio;
-    const audioList = audioApi?.getFiles?.() ?? [];
-    const audioCount = Array.isArray(audioList) ? audioList.length : 0;
+    const audioApi = getWaveRollAudioAPI();
+    const audioList = audioApi.getFiles();
+    const audioCount = audioList.length;
 
     // Show/hide sections
     if (audioHeader) {
@@ -297,8 +298,8 @@ export class FileToggleManager {
 
     audioControls.innerHTML = "";
     
-    const audioApi = (globalThis as any)._waveRollAudio;
-    const audioList = audioApi?.getFiles?.() ?? [];
+    const audioApi = getWaveRollAudioAPI();
+    const audioList = audioApi.getFiles();
     
     const files = audioList as AudioFileInfo[];
     for (const audio of files) {
