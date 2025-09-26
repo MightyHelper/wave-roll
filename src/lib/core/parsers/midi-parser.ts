@@ -1,23 +1,27 @@
-import { Midi } from "@tonejs/midi";
+import { Midi, Track } from "@tonejs/midi";
 import {
   ParsedMidi,
   MidiInput,
   NoteData,
   TrackData,
   MidiHeader,
-  TempoEvent,
-  TimeSignatureEvent,
-  ControlChangeEvent,
+  ControlChangeEvent, TempoEvent,
 } from "@/lib/midi/types";
 // Sustain-pedal elongation utilities (ported from onsets-and-frames)
 
 // Local analysis types
-export interface SustainRegion { start: number; end: number; duration: number }
+export interface SustainRegion {
+  start: number;
+  end: number;
+  duration: number
+}
+
 import {
   midiToNoteName,
   midiToPitchClass,
   midiToOctave,
 } from "@/lib/core/utils/midi";
+import { Note } from "@tonejs/midi/dist/Note";
 
 /**
  * Loads MIDI data from a URL by fetching the file
@@ -58,10 +62,9 @@ async function loadMidiFromFile(file: File): Promise<ArrayBuffer> {
 /**
  * Extracts track metadata from a Tone.js MIDI track
  * @param track - The Tone.js MIDI track object
- * @param index - The index of the track (used for default naming)
  * @returns TrackData object with name and channel information
  */
-function extractTrackMetadata(track: any, index: number): TrackData {
+function extractTrackMetadata(track: any): TrackData {
   const name = track.name || "Piano";
   const channel = track.channel || 0;
   return { name, channel };
@@ -72,37 +75,20 @@ function extractTrackMetadata(track: any, index: number): TrackData {
  * @param midi - The parsed Tone.js MIDI object
  * @returns MidiHeader object with metadata and timing information
  */
-function extractMidiHeader(midi: any): MidiHeader {
+function extractMidiHeader(midi: Midi): MidiHeader {
   // Extract song name from the first track with a name, or use a default
-  let name = "Untitled";
-  for (const track of midi.tracks) {
-    if (track.name) {
-      name = track.name;
-      break;
-    }
-  }
+  let name = midi.tracks.find(track => track.name)?.name ?? "Untitled";
 
   // Extract tempo events
-  const tempos: TempoEvent[] = midi.header.tempos.map((tempo: any) => ({
+  const tempos: TempoEvent[] = midi.header.tempos.map(tempo => ({
     time: tempo.time,
     ticks: tempo.ticks,
     bpm: tempo.bpm,
-  }));
-
-  // Extract time signature events
-  const timeSignatures: TimeSignatureEvent[] = midi.header.timeSignatures.map(
-    (ts: any) => ({
-      time: ts.time,
-      ticks: ts.ticks,
-      numerator: ts.numerator,
-      denominator: ts.denominator,
-    })
-  );
+  }) as TempoEvent);
 
   return {
     name,
     tempos,
-    timeSignatures,
     PPQ: midi.header.ppq,
   };
 }
@@ -111,28 +97,20 @@ function extractMidiHeader(midi: any): MidiHeader {
  * Extracts control change events (e.g., sustain-pedal CC 64) from a Tone.js
  * MIDI track.
  */
-function extractControlChanges(track: any): ControlChangeEvent[] {
+function extractControlChanges(track: Track): ControlChangeEvent[] {
   // Tone.js represents controlChanges as Record<number, ToneControlChange[]>
-  const result: ControlChangeEvent[] = [];
-
-  // Iterate through each controller number available on the track.
-  for (const controllerStr of Object.keys(track.controlChanges ?? {})) {
-    const controller = Number(controllerStr);
-    const events = track.controlChanges[controllerStr];
-    if (!Array.isArray(events)) continue;
-
-    for (const evt of events) {
-      result.push({
+  return Object.values(track.controlChanges)
+    .filter(controlChange => Array.isArray(controlChange))
+    .flatMap(controlChange =>
+      controlChange.map(evt => ({
         controller: evt.number,
         value: evt.value, // already normalized 0-1 in Tone.js
         time: evt.time,
         ticks: evt.ticks,
         name: evt.name,
         fileId: track.name,
-      });
-    }
-  }
-  return result;
+      }))
+    );
 }
 
 /**
@@ -140,7 +118,7 @@ function extractControlChanges(track: any): ControlChangeEvent[] {
  * @param note - The Tone.js note object
  * @returns NoteData object in the specified format
  */
-function convertNote(note: any): NoteData {
+function convertNote(note: Note): NoteData {
   return {
     midi: note.midi,
     time: note.time,
@@ -164,8 +142,7 @@ function convertNote(note: any): NoteData {
 export function applySustainPedalElongation(
   notes: NoteData[],
   controlChanges: ControlChangeEvent[],
-  threshold: number = 64,
-  channel: number = 0
+  threshold: number = 64
 ): NoteData[] {
   if (notes.length === 0) return [];
 
@@ -215,12 +192,18 @@ export function applySustainPedalElongation(
   // State
   let sustainOn = false;
   const activeNotes = new Map<number, { startTime: number; midi: number; velocity: number }>();
-  interface SustainedNoteEntry { index: number; startTime: number; velocity: number }
+
+  interface SustainedNoteEntry {
+    index: number;
+    startTime: number;
+    velocity: number
+  }
+
   const sustainedNotes = new Map<number, SustainedNoteEntry[]>();
   const finalNotes = new Map<number, NoteData>();
 
   const releaseAllSustained = (t: number) => {
-    for (const [pitch, stack] of sustainedNotes.entries()) {
+    for (const [, stack] of sustainedNotes.entries()) {
       for (const s of stack) {
         const orig = notes[s.index];
         const dur = Math.max(EPS, t - s.startTime);
@@ -296,13 +279,13 @@ export function applySustainPedalElongationSafe(
   controlChanges: ControlChangeEvent[],
   options: { threshold?: number; channel?: number; maxElongation?: number; verbose?: boolean } = {}
 ): NoteData[] {
-  const { threshold = 64, channel = 0, maxElongation = 30, verbose = false } = options;
+  const { threshold = 64, maxElongation = 30, verbose = false } = options;
   try {
     if (!Array.isArray(notes) || !Array.isArray(controlChanges)) {
       if (verbose) console.warn('Invalid input to sustain pedal elongation');
       return notes;
     }
-    let res = applySustainPedalElongation(notes, controlChanges, threshold, channel);
+    let res = applySustainPedalElongation(notes, controlChanges, threshold);
     if (maxElongation > 0) {
       res = res.map((n) => (n.duration > maxElongation ? { ...n, duration: maxElongation } : n));
     }
@@ -357,9 +340,26 @@ export function analyzeSustainPedalUsage(
   }
   const total = regions.reduce((s, r) => s + r.duration, 0);
   const avg = regions.length > 0 ? total / regions.length : 0;
-  return { hasSustain: true, sustainCount: regions.length, averageSustainDuration: avg, totalSustainTime: total, sustainRegions: regions };
+  return {
+    hasSustain: true,
+    sustainCount: regions.length,
+    averageSustainDuration: avg,
+    totalSustainTime: total,
+    sustainRegions: regions
+  };
 }
 
+
+const SUSTAIN_PEDAL_CONTROL_CODE = 64
+const DEFAULT_PEDAL_THRESHOLD = 64
+
+function comparingNoteData(a: NoteData, b: NoteData) {
+  return a.time !== b.time ? a.time - b.time : a.midi - b.midi;
+}
+
+async function loadMidiData(input: string | File) {
+  return typeof input === "string" ? await loadMidiFromUrl(input) : await loadMidiFromFile(input);
+}
 
 /**
  * Parses a MIDI file and extracts musical data in the Tone.js format
@@ -369,6 +369,7 @@ export function analyzeSustainPedalUsage(
  * piano track and extracts notes, timing, and metadata.
  *
  * @param input - Either a URL string or a File object containing the MIDI data
+ * @param options
  * @returns Promise that resolves to a ParsedMidi object containing all extracted data
  * @throws Error if the MIDI file cannot be loaded or parsed
  *
@@ -391,77 +392,55 @@ export async function parseMidi(
   input: MidiInput,
   options: { applyPedalElongate?: boolean; pedalThreshold?: number } = {}
 ): Promise<ParsedMidi> {
-  try {
-    // Step 1: Load MIDI data based on input type
-    let arrayBuffer: ArrayBuffer;
-    if (typeof input === "string") {
-      arrayBuffer = await loadMidiFromUrl(input);
-    } else {
-      arrayBuffer = await loadMidiFromFile(input);
-    }
 
-    // Step 2: Parse MIDI data with Tone.js
-    const midi = new Midi(arrayBuffer);
+  // Step 1: Load MIDI data based on input type
+  let arrayBuffer: ArrayBuffer = await loadMidiData(input);
 
-    // Step 3: Extract header information
-    const header = extractMidiHeader(midi);
+  const midi = new Midi(arrayBuffer); // Step 2: Parse MIDI data with Tone.js
+  const header = extractMidiHeader(midi); // Step 3: Extract header information
 
   // Step 4: Collect ALL tracks that contain notes and merge them for evaluation.
-  const noteTracks = midi.tracks.filter((t: any) => t.notes && t.notes.length > 0);
+  const noteTracks = midi.tracks.filter(t => t.notes.length > 0);
   if (noteTracks.length === 0) {
     throw new Error("No tracks with notes found in MIDI file");
   }
 
   // Step 5: Extract track metadata (use the first track name/channel for compatibility)
   const primaryTrack = noteTracks[0];
-  const track = extractTrackMetadata(primaryTrack, 0);
+  const track = extractTrackMetadata(primaryTrack);
 
   // Step 6: Convert notes to our format (per-track), applying sustain per channel when enabled
   const applyPedal = options.applyPedalElongate !== false; // default ON
-  const threshold = options.pedalThreshold ?? 64;
-  const mergedNotes: NoteData[] = [];
-  for (const t of noteTracks) {
-    const channel = t.channel ?? 0;
-    let trackNotes: NoteData[] = t.notes.map(convertNote);
+  const threshold = options.pedalThreshold ?? DEFAULT_PEDAL_THRESHOLD;
+  const mergedNotes: NoteData[] = noteTracks.flatMap(track => {
+    let trackNotes: NoteData[] = track.notes.map(convertNote);
     if (applyPedal) {
-      // Extract CC exclusively from this track (channel)
-      const cc = extractControlChanges(t);
-      if (cc.some((e) => e.controller === 64)) {
+      const cc = extractControlChanges(track);
+      if (cc.some(e => e.controller === SUSTAIN_PEDAL_CONTROL_CODE)) {
         // Use the enhanced sustain-pedal elongation which follows
         // onsets-and-frames ordering (sustain_off > note_off > sustain_on > note_on)
-        trackNotes = applySustainPedalElongation(trackNotes, cc, threshold, channel);
+        trackNotes = applySustainPedalElongation(trackNotes, cc, threshold);
       }
     }
-    mergedNotes.push(...trackNotes);
-  }
+    return trackNotes
+  })
 
   // Merge and sort
-  let notes: NoteData[] = mergedNotes.sort((a, b) =>
-    a.time !== b.time ? a.time - b.time : a.midi - b.midi
-  );
+  let notes: NoteData[] = mergedNotes.sort(comparingNoteData);
 
   // Collect merged control changes across all note tracks for UI/diagnostics
   const ccMerged: ControlChangeEvent[] = [];
-  for (const t of noteTracks) {
-    const channel = t.channel ?? 0;
-    const cc = extractControlChanges(t).map((evt) => ({ ...evt, fileId: primaryTrack.name }));
-    ccMerged.push(...cc);
-  }
+  noteTracks.flatMap(track =>
+    extractControlChanges(track)
+      .map((evt) => ({ ...evt, fileId: primaryTrack.name }))
+  )
 
-    // Step 9: Calculate total duration
-    const duration = midi.duration;
-
-    return {
-      header,
-      duration,
-      track,
-      notes,
-      controlChanges: ccMerged, // merged CC events from all note tracks
-    };
-  } catch (error) {
-    if (error instanceof Error) {
-      throw new Error(`Failed to parse MIDI file: ${error.message}`);
-    }
-    throw new Error("Failed to parse MIDI file: Unknown error");
-  }
+  // Step 9: Calculate total duration
+  return {
+    header,
+    duration: midi.duration,
+    track,
+    notes,
+    controlChanges: ccMerged, // merged CC events from all note tracks
+  };
 }

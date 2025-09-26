@@ -87,18 +87,19 @@ export class BackgroundLayer extends PIXI.Container {
     const minLabelSpacing = 50;
     const transform = createCoordinateTransform(pr);
 
-    const drawGridLine = (tVal: number, alpha: number, showLabel: boolean) => {
-      const x = transform.timeToPixel(tVal) + pr.state.panX;
-      if (x < -10 || x > pr.options.width + 10) return;
-
+    let lastLabelX = -Infinity;
+    for (let t = 0; t <= maxTime; t += timeStep) {
+      const pianoKeysOffset = pr.options.showPianoKeys ? 60 : 0;
+      const x = pr.timeScale(t) * pr.state.zoomX + pianoKeysOffset + pr.state.panX;
+      const showLabel = x - lastLabelX >= minLabelSpacing;
+      if (showLabel) lastLabelX = x;
       DrawingPrimitives.drawVerticalLine(this.backgroundGrid, x, pr.options.height, {
         width: 1,
         color: 0xe0e0e0,
-        alpha,
+        alpha: 1.0,
       });
-
       if (showLabel) {
-        const label = textCache.getText(tVal.toFixed(1) + "s", {
+        const label = textCache.getText(t.toFixed(1) + "s", {
           fontSize: 10,
           fill: 0x555555,
           align: "center",
@@ -107,21 +108,19 @@ export class BackgroundLayer extends PIXI.Container {
         label.y = pr.options.height - 14;
         this.backgroundLabelContainer.addChild(label);
       }
-    };
-
-    let lastLabelX = -Infinity;
-    for (let t = 0; t <= maxTime; t += timeStep) {
-      const x = transform.timeToPixel(t) + pr.state.panX;
-      const showLabel = x - lastLabelX >= minLabelSpacing;
-      if (showLabel) lastLabelX = x;
-      drawGridLine(t, 1.0, showLabel);
     }
 
     if (minorStep && minorStep < timeStep) {
       const eps = minorStep / 1000;
       for (let t = 0; t <= maxTime + eps; t += minorStep) {
         if (Math.abs(t % timeStep) < eps || Math.abs(timeStep - (t % timeStep)) < eps) continue;
-        drawGridLine(t, 0.25, false);
+        const pianoKeysOffset = pr.options.showPianoKeys ? 60 : 0;
+        const x = pr.timeScale(t) * pr.state.zoomX + pianoKeysOffset + pr.state.panX;
+        DrawingPrimitives.drawVerticalLine(this.backgroundGrid, x, pr.options.height, {
+          width: 1,
+          color: 0xe0e0e0,
+          alpha: 0.25,
+        });
       }
     }
 
@@ -130,70 +129,60 @@ export class BackgroundLayer extends PIXI.Container {
     // Waveform overlay band
     try {
       const api = (globalThis as unknown as { _waveRollAudio?: WaveRollAudioAPI })._waveRollAudio;
-      if (api?.getVisiblePeaks) {
-        const peaksPayload = api.getVisiblePeaks();
-        if (peaksPayload && peaksPayload.length > 0) {
-          const height = pr.options.height;
-          const pixelsPerSecond = transform.getPixelsPerSecond();
-          const secondsPerPixel = 1 / pixelsPerSecond;
+      if (!api?.getVisiblePeaks) return;
+      const peaksPayload = api.getVisiblePeaks();
+      if (!(peaksPayload && peaksPayload.length > 0)) return;
+      const height = pr.options.height;
+      const pixelsPerSecond = transform.getPixelsPerSecond();
+      const secondsPerPixel = 1 / pixelsPerSecond;
+      this.waveformLayer.clear();
+      this.waveformKeysLayer.clear();
+      const visibleRange = getVisibleTimeRange(pr);
+      const t0 = visibleRange.timeStart;
+      const t1 = visibleRange.timeEnd;
+      const step = Math.max(secondsPerPixel, 0.005);
+      const bandPadding = 0;
+      const bandHeight = Math.max(24, Math.min(96, Math.floor(height * 0.22)));
+      const bandTop = height - bandHeight - bandPadding;
+      const bandMidY = bandTop + bandHeight * 0.5;
+      this.backgroundGrid.moveTo(0, bandTop - 1);
+      this.backgroundGrid.lineTo(pr.options.width, bandTop - 1);
+      this.backgroundGrid.stroke({ width: 1, color: 0x999999, alpha: 0.5 });
+      const pianoKeysOffset = pr.options.showPianoKeys ? 60 : 0;
+      this.waveformLayer.rect(pianoKeysOffset, bandTop, Math.max(0, pr.options.width - pianoKeysOffset), bandHeight);
+      this.waveformLayer.fill({ color: 0x000000, alpha: 0.04 });
+      for (let t = t0; t <= t1; t += step) {
+        const x = transform.timeToPixel(t) + pr.state.panX;
+        if (x < pianoKeysOffset || x > pr.options.width) continue;
+        const p = api.sampleAtTime ? api.sampleAtTime(t) : null;
+        if (!p) continue;
+        const amp = Math.max(Math.max(0, Math.min(1, p.max)), Math.max(0, Math.min(1, p.min)));
+        const halfH = bandHeight * 0.5 * amp;
+        this.waveformLayer.moveTo(x, bandMidY - halfH);
+        this.waveformLayer.lineTo(x, bandMidY + halfH);
+        this.waveformLayer.stroke({ width: 1, color: p.color ?? 0x475569, alpha: 0.8 });
+      }
+      if (pr.options.showPianoKeys) {
+        const keysBandHeight = bandHeight;
+        const keysBandTop = bandTop;
+        const keysBandMidY = bandMidY;
 
-          this.waveformLayer.clear();
-          this.waveformKeysLayer.clear();
+        this.waveformKeysLayer.rect(0, keysBandTop, Math.max(0, pr.playheadX), keysBandHeight);
+        this.waveformKeysLayer.fill({ color: 0x000000, alpha: 0.04 });
 
-          const visibleRange = getVisibleTimeRange(pr);
-          const t0 = visibleRange.timeStart;
-          const t1 = visibleRange.timeEnd;
+        const tKeys0 = Math.max(0, pr.timeScale.invert((0 - pianoKeysOffset - pr.state.panX) / pr.state.zoomX));
+        const tKeys1 = Math.min(pr.timeScale.domain()[1], pr.timeScale.invert((pr.playheadX - pianoKeysOffset - pr.state.panX) / pr.state.zoomX));
 
-          const step = Math.max(secondsPerPixel, 0.005);
-
-          const bandPadding = 0;
-          const bandHeight = Math.max(24, Math.min(96, Math.floor(height * 0.22)));
-          const bandTop = height - bandHeight - bandPadding;
-          const bandMidY = bandTop + bandHeight * 0.5;
-
-          // separator line
-          this.backgroundGrid.moveTo(0, bandTop - 1);
-          this.backgroundGrid.lineTo(pr.options.width, bandTop - 1);
-          this.backgroundGrid.stroke({ width: 1, color: 0x999999, alpha: 0.5 });
-
-          // band background
-          this.waveformLayer.rect(pianoKeysOffset, bandTop, Math.max(0, pr.options.width - pianoKeysOffset), bandHeight);
-          this.waveformLayer.fill({ color: 0x000000, alpha: 0.04 });
-
-          for (let t = t0; t <= t1; t += step) {
-            const x = transform.timeToPixel(t) + pr.state.panX;
-            const p = api.sampleAtTime ? api.sampleAtTime(t) : null;
-            if (!p) continue;
-            const amp = Math.max(Math.max(0, Math.min(1, p.max)), Math.max(0, Math.min(1, p.min)));
-            const halfH = bandHeight * 0.5 * amp;
-            this.waveformLayer.moveTo(x, bandMidY - halfH);
-            this.waveformLayer.lineTo(x, bandMidY + halfH);
-            this.waveformLayer.stroke({ width: 1, color: p.color ?? 0x475569, alpha: 0.8 });
-          }
-
-          if (pr.options.showPianoKeys) {
-            const keysBandHeight = bandHeight;
-            const keysBandTop = bandTop;
-            const keysBandMidY = bandMidY;
-
-            this.waveformKeysLayer.rect(0, keysBandTop, Math.max(0, pr.playheadX), keysBandHeight);
-            this.waveformKeysLayer.fill({ color: 0x000000, alpha: 0.04 });
-
-            const tKeys0 = Math.max(0, pr.timeScale.invert((0 - pianoKeysOffset - pr.state.panX) / pr.state.zoomX));
-            const tKeys1 = Math.min(pr.timeScale.domain()[1], pr.timeScale.invert((pr.playheadX - pianoKeysOffset - pr.state.panX) / pr.state.zoomX));
-
-            for (let t = tKeys0; t <= tKeys1; t += step) {
-              const xKeys = transform.timeToPixel(t) + pr.state.panX;
-              if (xKeys < 0 || xKeys >= pr.playheadX) continue;
-              const p = api.sampleAtTime ? api.sampleAtTime(t) : null;
-              if (!p) continue;
-              const amp = Math.max(Math.max(0, Math.min(1, p.max)), Math.max(0, Math.min(1, p.min)));
-              const halfH = keysBandHeight * 0.5 * amp;
-              this.waveformKeysLayer.moveTo(xKeys, keysBandMidY - halfH);
-              this.waveformKeysLayer.lineTo(xKeys, keysBandMidY + halfH);
-              this.waveformKeysLayer.stroke({ width: 1, color: p.color ?? 0x475569, alpha: 0.8 });
-            }
-          }
+        for (let t = tKeys0; t <= tKeys1; t += step) {
+          const xKeys = transform.timeToPixel(t) + pr.state.panX;
+          if (xKeys < 0 || xKeys >= pr.playheadX) continue;
+          const p = api.sampleAtTime?.(t);
+          if (!p) continue;
+          const amp = Math.max(Math.max(0, Math.min(1, p.max)), Math.max(0, Math.min(1, p.min)));
+          const halfH = keysBandHeight * 0.5 * amp;
+          this.waveformKeysLayer.moveTo(xKeys, keysBandMidY - halfH);
+          this.waveformKeysLayer.lineTo(xKeys, keysBandMidY + halfH);
+          this.waveformKeysLayer.stroke({ width: 1, color: p.color ?? 0x475569, alpha: 0.8 });
         }
       }
     } catch (e) {

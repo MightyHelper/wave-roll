@@ -74,8 +74,6 @@ export interface MidiHeader {
   name: string;
   /** Array of tempo changes throughout the piece */
   tempos: TempoEvent[];
-  /** Array of time signature changes throughout the piece */
-  timeSignatures: TimeSignatureEvent[];
   /** Pulses Per Quarter note - the timing resolution of the MIDI file */
   PPQ: number;
 }

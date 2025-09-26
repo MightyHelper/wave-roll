@@ -28,7 +28,9 @@ export function pinchStart(ev: TouchEvent, pr: PianoRoll, state: PinchState): vo
   state.isPinching = true;
   state.lastDistance = distance(t0, t1);
   const midX = midpointX(t0, t1);
-  state.anchorX = Math.max(0, Math.min(pr.options.width, midX - rect.left));
+  const cssX = Math.max(0, Math.min(rect.width, midX - rect.left));
+  const scaleX = pr.app.renderer.width / rect.width;
+  state.anchorX = cssX * scaleX;
 }
 
 export function pinchMove(ev: TouchEvent, pr: PianoRoll, state: PinchState): void {

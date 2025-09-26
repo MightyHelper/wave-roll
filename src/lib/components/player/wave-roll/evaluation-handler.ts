@@ -2,10 +2,9 @@ import { ColoredNote } from "@/core/visualization";
 import { StateManager } from "@/core/state";
 import { COLOR_PRIMARY, GRAY_EVAL_INTERSECTION, GRAY_EVAL_AMBIGUOUS } from "@/lib/core/constants";
 import { mixColorsOklch, blendColorsAverage } from "@/lib/core/utils/color/blend";
-import { hsvToRgb, rgbToHsv } from "@/lib/core/utils/color/format";
 import { getAmbiguousColor } from "@/lib/core/visualization/color-utils";
-import { toNumberColor, aaGrayFor, NEUTRAL_GRAY, HIGHLIGHT_ANCHOR_REF, HIGHLIGHT_ANCHOR_EST, HIGHLIGHT_BLEND_RATIO } from "@/lib/components/player/wave-roll/evaluation/colors";
-import { buildMatchIndex, buildUnionRangesByRef } from "@/lib/components/player/wave-roll/evaluation/match-index";
+import { toNumberColor, NEUTRAL_GRAY, HIGHLIGHT_ANCHOR_REF, HIGHLIGHT_ANCHOR_EST, HIGHLIGHT_BLEND_RATIO } from "@/lib/components/player/wave-roll/evaluation/colors";
+import { buildMatchIndex, buildUnionRangesByRef } from "@/components/player/wave-roll/evaluation/match-index";
 import { buildAmbiguities } from "@/lib/components/player/wave-roll/evaluation/ambiguity";
 import { parseModeFlags } from "@/lib/components/player/wave-roll/evaluation/mode-flags";
 import { handleGtMissedOnly } from "@/lib/components/player/wave-roll/evaluation/handlers/gt-missed-only";
@@ -49,16 +48,12 @@ export class EvaluationHandler {
     };
 
     // Color anchors and helpers are imported from evaluation/colors
-
     // 1) Run matching for each estimated file and build indexes
     const { byRef, byEst } = buildMatchIndex(refFile, estFiles, tolerances);
-
     // 2) Build union of intersections per reference note across all estimates
     const unionRangesByRef = buildUnionRangesByRef(byRef, refFile, estFiles);
-
     // 2.5) Build ambiguous overlaps (case 3)
     const { ambiguousByRef, ambiguousByEst } = buildAmbiguities(refFile, estFiles, byRef, byEst, tolerances);
-
     // 3) Process notes based on highlight mode
     const result: ColoredNote[] = [];
     const {
@@ -69,7 +64,6 @@ export class EvaluationHandler {
       isFpOnly,
       isFnOnly,
       isOnlyMode,
-      aggregationMode,
     } = parseModeFlags(highlightMode, estFiles.length);
 
     baseNotes.forEach((coloredNote) => {
@@ -80,9 +74,7 @@ export class EvaluationHandler {
 
       // Non-evaluation files: in ONLY modes, hide; otherwise pass-through
       if (!isRef && !isEst) {
-        if (!isOnlyMode) {
-          result.push(coloredNote);
-        }
+        if (!isOnlyMode) result.push(coloredNote);
         return;
       }
 

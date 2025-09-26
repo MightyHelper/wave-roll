@@ -80,7 +80,6 @@ export interface UIComponentDependencies {
 
 export interface UIElements {
   mainContainer: HTMLElement;
-  sidebarContainer: HTMLElement;
   playerContainer: HTMLElement;
   controlsContainer: HTMLElement;
   timeDisplay: HTMLElement;

@@ -61,3 +61,9 @@ export interface MidiFileItem {
 }
 
 export type MidiFileItemList = Array<MidiFileItem>;
+export type InputFileFormat = {
+  path: string;
+  name?: string;
+  type?: "audio" | "midi";
+  color?: string;
+}

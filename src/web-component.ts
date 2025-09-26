@@ -1,4 +1,5 @@
-import { createWaveRollPlayer } from "@/lib/components/player/wave-roll/player";
+import { createWaveRollPlayer, WaveRollPlayer } from "@/lib/components/player/wave-roll/player";
+import { InputFileFormat } from "@/core/file";
 
 /**
  * WaveRoll Web Component
@@ -13,7 +14,7 @@ import { createWaveRollPlayer } from "@/lib/components/player/wave-roll/player";
  * - The component accepts `name` for user-facing labels.
  */
 class WaveRollElement extends HTMLElement {
-  private player: any = null;
+  private player: WaveRollPlayer | null = null;
   private container: HTMLDivElement | null = null;
 
   constructor() {
@@ -21,32 +22,34 @@ class WaveRollElement extends HTMLElement {
     this.attachShadow({ mode: 'open' });
   }
 
+  // noinspection JSUnusedGlobalSymbols (Called by HTMLElement)
   connectedCallback() {
     this.render();
     this.initializePlayer();
   }
 
+  // noinspection JSUnusedGlobalSymbols (Called by HTMLElement)
   disconnectedCallback() {
-    if (this.player && typeof this.player.destroy === 'function') {
-      this.player.destroy();
-    }
+    this.player?.dispose()
   }
 
+  // noinspection JSUnusedGlobalSymbols (Called by HTMLElement)
   static get observedAttributes() {
     return ['files', 'readonly'];
   }
 
+  // noinspection JSUnusedGlobalSymbols (Called by HTMLElement)
   attributeChangedCallback(name: string, oldValue: string, newValue: string) {
-    if (name === 'files' && oldValue !== newValue) {
-      this.initializePlayer();
-      return;
-    }
-    if (name === 'readonly' && this.player && oldValue !== newValue) {
-      const ro = typeof (this as any).hasAttribute === 'function' ? this.hasAttribute('readonly') : !!newValue;
-      try {
-        this.player.setPermissions?.({ canAddFiles: !ro, canRemoveFiles: !ro });
-      } catch {}
-    }
+    if (oldValue === newValue) return;
+    ({
+      [name]: () => {
+      },
+      "files": () => this.initializePlayer(),
+      "readonly": () => {
+        const ro = this.hasAttribute?.('readonly') ?? !!newValue;
+        this.player?.setPermissions?.({ canAddFiles: !ro, canRemoveFiles: !ro });
+      }
+    }[name])()
   }
 
   private render() {
@@ -77,72 +80,64 @@ class WaveRollElement extends HTMLElement {
     this.shadowRoot.appendChild(this.container);
   }
 
-  private async initializePlayer() {
-    if (!this.container) return;
-
-    // Clean up existing player
-    if (this.player) {
-      if (typeof this.player.destroy === 'function') {
-        this.player.destroy();
+  private parseFilesAttr(value: string | null): InputFileFormat[] {
+    if (value === null) return [];
+    let files: any;
+    try {
+      files = JSON.parse(value);
+    } catch (e: any) {
+      if (e instanceof SyntaxError) {
+        console.error('Invalid files attribute:', e);
+        return [];
       }
-      this.player = null;
     }
+    if (!Array.isArray(files)) return [];
+    // Normalize incoming items: use `name` as the primary property
+    let parsedFiles = files
+      .filter((f: any) => typeof f?.path === 'string')
+      .map((f: InputFileFormat) => ({
+          path: f.path,
+          name: f?.name ?? f.path,
+          type: f?.type ?? "audio",
+          color: f?.color
+        }
+      ));
+    if (parsedFiles.length !== files.length) console.warn('Some files could not be parsed:', files);
+    return parsedFiles;
+  }
+
+  // Note: This also is called when the value for `files` changes on the dom node...
+  //       Ideally we would just send the updated info, but for now we re-create the element from scratch
+  private async initializePlayer() {
+    if (!this.container) return console.warn("[WaveRollElement] Tried to initialize player before render");
+
+    // Clean up existing player [Because we might re-create the element from scratch]
+    this.player?.dispose?.();
+    this.player = null;
 
     // Parse files attribute
-    const filesAttr = this.getAttribute('files');
-    
-    let files = [] as any[];
-    if (filesAttr) {
-      try {
-        files = JSON.parse(filesAttr);
-      } catch (e) {
-        console.error('Invalid files attribute:', e);
-        return;
-      }
+    const normalized = this.parseFilesAttr(this.getAttribute('files'));
+    this.player = await createWaveRollPlayer(this.container, normalized);
+    if (this.hasAttribute('readonly')) {
+      this.player.setPermissions({ canAddFiles: false, canRemoveFiles: false });
     }
-
-    // Always create the player, even with no files (shows empty state)
-    try {
-      // Normalize incoming items: use `name` as the primary property
-      const normalized = (Array.isArray(files) ? files : []).map((f: any) => {
-        const mapped: any = { path: f.path };
-        if (typeof f?.name === 'string') {
-          mapped.name = f.name;
-        }
-        if (f && typeof f.type === 'string') {
-          mapped.type = f.type;
-        }
-        if (f && typeof f.color !== 'undefined') {
-          mapped.color = f.color;
-        }
-        return mapped;
-      });
-      this.player = await createWaveRollPlayer(this.container, normalized);
-      // Apply readonly after player creation if attribute present
-      if (typeof (this as any).hasAttribute === 'function' ? this.hasAttribute('readonly') : true) {
-        // If hasAttribute is unavailable (test stubs), treat presence of attribute string as truthy
-        this.player.setPermissions?.({ canAddFiles: false, canRemoveFiles: false });
-      }
-      // Notify listeners the component has finished initialization
-      this.dispatchEvent(new Event('load'));
-    } catch (e) {
-      console.error('Failed to initialize WaveRoll player:', e);
-    }
+    // Notify listeners the component has finished initialization
+    this.dispatchEvent(new Event('load'));
   }
 
   // Expose minimal control API for tests/integration
+
+  // noinspection JSUnusedGlobalSymbols (External API)
   public async play(): Promise<void> {
-    if (this.player?.play) {
-      await this.player.play();
-    }
+    await this.player?.play?.();
   }
 
+  // noinspection JSUnusedGlobalSymbols (External API)
   public pause(): void {
-    if (this.player?.pause) {
-      this.player.pause();
-    }
+    this.player?.pause?.();
   }
 
+  // noinspection JSUnusedGlobalSymbols (External API)
   public get isPlaying(): boolean {
     return !!this.player?.isPlaying;
   }
@@ -151,39 +146,21 @@ class WaveRollElement extends HTMLElement {
    * Seek to a specific time (seconds).
    * Provided for E2E/manual testing via index.html.
    */
+  // noinspection JSUnusedGlobalSymbols (External API)
   public seek(time: number): void {
-    try {
-      // Prefer direct method on player if available
-      if (typeof this.player?.seek === 'function') {
-        this.player.seek(time);
-        return;
-      }
-      // Fallback: try visualization engine behind the player
-      (this.player as any)?.visualizationEngine?.seek?.(time, true);
-    } catch (e) {
-      console.error('WaveRollElement.seek failed:', e);
-    }
+    this.player?.seek?.(time);
   }
 
   /**
    * Return lightweight state for assertions in tests.
    */
+  // noinspection JSUnusedGlobalSymbols (External API)
   public getState(): any {
-    try {
-      if (typeof this.player?.getState === 'function') {
-        return this.player.getState();
-      }
-      return (this.player as any)?.visualizationEngine?.getState?.();
-    } catch (e) {
-      console.error('WaveRollElement.getState failed:', e);
-      return null;
-    }
+    return this.player?.pianoRollManager?.getPianoRollInstance()?.getState?.();
   }
 }
 
 // Register the custom element
-if (!customElements.get('wave-roll')) {
-  customElements.define('wave-roll', WaveRollElement);
-}
+if (!customElements.get('wave-roll')) customElements.define('wave-roll', WaveRollElement);
 
 export { WaveRollElement };

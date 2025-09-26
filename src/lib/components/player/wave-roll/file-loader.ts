@@ -12,11 +12,11 @@ export class FileLoader {
    * Load sample MIDI files
    */
   async loadSampleFiles(
-    files: Array<{
+    files: {
       path: string;
       name?: string;
       type?: "midi" | "audio";
-    }> = [],
+    }[] = [],
     callbacks?: {
       onComplete?: () => void;
       onError?: (error: any) => void;
@@ -56,18 +56,10 @@ export class FileLoader {
 
       // Load audio files
       if (audioFiles.length > 0) {
-        // console.log('[FileLoader] Loading audio files...');
         await this.fileManager.loadSampleAudioFiles(audioFiles);
-        // console.log('[FileLoader] Audio files loaded successfully');
-        
         // Check registry after loading
         const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => any[] } })._waveRollAudio;
-        if (api?.getFiles) {
-          const registeredFiles = api.getFiles();
-          // console.log('[FileLoader] WAV registry after loading:', registeredFiles.length, 'files:', registeredFiles.map(f => f.displayName || f.id));
-        } else {
-          // console.log('[FileLoader] WAV registry still not available after loading');
-        }
+        api?.getFiles?.();
       }
 
       callbacks?.onComplete?.();

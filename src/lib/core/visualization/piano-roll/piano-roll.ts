@@ -14,7 +14,7 @@ import { renderPlayhead } from "@/lib/core/visualization/piano-roll/renderers/pl
 // Background grid/waveform/loop overlays are now handled by BackgroundLayer component
 import { renderNotes } from "@/lib/core/visualization/piano-roll/renderers/notes";
 import { renderSustains } from "@/lib/core/visualization/piano-roll/renderers/sustains";
-import { initializeTooltipOverlay, initializeHelpOverlay } from "@/lib/core/visualization/piano-roll/ui/overlays";
+import { initializeTooltipOverlay } from "@/lib/core/visualization/piano-roll/ui/overlays";
 import {
   clampPanX,
   clampPanY,
@@ -50,9 +50,6 @@ export class PianoRoll {
 
   // Tooltip element for note hover information
   private tooltipDiv: HTMLDivElement | null = null;
-  // Help button and panel (overlay UI for interaction hints)
-  private helpButtonEl: HTMLButtonElement | null = null;
-  private helpPanelEl: HTMLDivElement | null = null;
 
   public playheadX: number = 0;
   public notes: NoteData[] = [];
@@ -77,16 +74,14 @@ export class PianoRoll {
    * flag is `false`.
    */
   private needsNotesRedraw: boolean = true;
+  private needsSustainRedraw: boolean = true;
 
   // Scales for coordinate transformation
-  public timeScale!: ScaleLinear<number, number>;
-  public pitchScale!: ScaleLinear<number, number>;
+  public timeScale!: ScaleLinear;
+  public pitchScale!: ScaleLinear;
 
-  // Performance optimization
-  private lastRenderTime = 0;
-  private renderThrottleMs = 16; // ~60fps
   private rafId: number | null = null;
-  
+
   // Performance metrics
   private performanceMetrics = {
     renderCount: 0,
@@ -120,13 +115,12 @@ export class PianoRoll {
   public fileInfoMap?: FileInfoMap;
 
   private constructor(
-    canvas: HTMLCanvasElement,
     domContainer: HTMLElement,
     options: PianoRollConfig = {}
   ) {
     // Store DOM container reference
     this.domContainer = domContainer;
-    
+
     // Set default options
     this.options = {
       width: 800,
@@ -195,13 +189,12 @@ export class PianoRoll {
     domContainer: HTMLElement,
     options: PianoRollConfig = {}
   ): Promise<PianoRoll> {
-    const instance = new PianoRoll(canvas, domContainer, options);
+    const instance = new PianoRoll(domContainer, options);
     await instance.initializeApp(canvas);
     instance.initializeContainers();
     instance.initializeScales();
     // Add tooltip overlay after containers are ready
     instance.initializeTooltip(canvas);
-    instance.initializeHelpButton(canvas);
     instance.setupInteraction();
     instance.render(); // Full render including playhead
     return instance;
@@ -238,14 +231,6 @@ export class PianoRoll {
   private initializeTooltip(canvas: HTMLCanvasElement): void {
     this.tooltipDiv = initializeTooltipOverlay(canvas, this.domContainer);
   }
-
-  /** Create a top-right help button with hover panel explaining interactions */
-  private initializeHelpButton(canvas: HTMLCanvasElement): void {
-    const { button, panel } = initializeHelpOverlay(canvas, this.domContainer);
-    this.helpButtonEl = button;
-    this.helpPanelEl = panel;
-  }
-
   /**
    * Find all notes at the given time and pitch position
    */
@@ -320,7 +305,7 @@ export class PianoRoll {
       });
 
       fileLines = sortedFiles
-        .map(([fileId, { info, notes }]) => {
+        .map(([, { info }]) => {
           const swatch = `<span style="display:inline-block;width:12px;height:12px;background:#${info.color
             .toString(16)
             .padStart(
@@ -482,7 +467,11 @@ export class PianoRoll {
    * Request render with throttling for performance
    */
   public requestRender(): void {
-    this.render();
+    if (this.rafId !== null) return;
+    this.rafId = requestAnimationFrame(() => {
+      this.rafId = null;
+      this.render();
+    });
   }
 
   /**
@@ -497,7 +486,6 @@ export class PianoRoll {
 
     // Update mask for notes/sustains prior to drawing (legacy path only).
     // When using the composite offscreen layer we avoid runtime masks entirely.
-    // @ts-expect-error migration-only private ref
     const hasComposite = Boolean((this as any)._compositeTimelineLayer?.render);
     if (!hasComposite) {
       const bandPadding = 6;
@@ -513,77 +501,55 @@ export class PianoRoll {
     }
 
     // Playhead via component if available (fallback to legacy renderer otherwise)
-    // @ts-expect-error migration-only private ref
     if ((this as any)._playheadLayer?.render) {
-      // @ts-expect-error index signature
       (this as any)._playheadLayer.render(this);
     } else {
       renderPlayhead(this);
     }
     // Delegate background rendering to component created in initializeContainers()
-    // @ts-expect-error private attachment for migration phase
     if ((this as any)._backgroundLayer?.render) {
-      // @ts-expect-error index signature
       (this as any)._backgroundLayer.render(this);
     }
 
     // Loop overlay (A/B lines and shade)
-    // @ts-expect-error migration-only private ref
     if ((this as any)._loopOverlayLayer?.render) {
-      // @ts-expect-error index signature
       (this as any)._loopOverlayLayer.render(this);
     }
 
     // Only re-generate note geometry when required; otherwise we simply shift
     // the container horizontally (pan) which is much cheaper than rebuilding
     // thousands of Graphics paths every frame.
-    if (this.needsNotesRedraw) {
+    const hadNotesRedraw = this.needsNotesRedraw;
+    if (hadNotesRedraw) {
       // Prefer component-based rendering when available
-      // @ts-expect-error migration-only private ref
       if ((this as any)._notesLayer?.render) {
-        // @ts-expect-error index signature
         (this as any)._notesLayer.render(this);
       } else {
         renderNotes(this);
       }
-      this.needsNotesRedraw = false;
     }
 
     // Redraw sustain-pedal overlay so it reflects current pan/zoom
     // Prefer component-based sustain overlay rendering
-    // @ts-expect-error migration-only private ref
-    if ((this as any)._sustainLayer?.render) {
-      // @ts-expect-error index signature
-      (this as any)._sustainLayer.render(this);
-    } else {
-      renderSustains(this);
+    const hadSustainRedraw = this.needsSustainRedraw;
+    if (hadSustainRedraw) {
+      if ((this as any)._sustainLayer?.render) {
+        (this as any)._sustainLayer.render(this);
+      } else {
+        renderSustains(this);
+      }
     }
 
     // Render composite timeline (notes + sustain + overlaps) offscreen and blit
-    // @ts-expect-error migration-only private ref
     if ((this as any)._compositeTimelineLayer?.render) {
-      // @ts-expect-error index signature
+      // Signal composite to redraw when this frame modified staging contents
+      (this as any)._compositeForceRedraw = hadNotesRedraw || hadSustainRedraw;
       (this as any)._compositeTimelineLayer.render(this);
     } else {
-      // Legacy path: apply transforms directly
-      const pianoKeysOffset = this.options.showPianoKeys ? 60 : 0;
-      const bandPadding = 6;
-      const bandHeight = Math.max(24, Math.min(96, Math.floor(this.options.height * 0.22)));
-      const usableHeight = Math.max(0, this.options.height - (bandPadding + bandHeight));
-      const pivotY = Math.floor(usableHeight / 2);
-
-      const applyTransform = (obj: PIXI.Container | PIXI.Graphics) => {
-        // @ts-expect-error PIXI.DisplayObject has pivot on Container/Graphics
-        obj.pivot.set(pianoKeysOffset, pivotY);
-        // @ts-expect-error position exists on DisplayObject
-        obj.position.set(pianoKeysOffset + this.state.panX, pivotY + this.state.panY);
-        // @ts-expect-error scale exists on DisplayObject
-        obj.scale.set(this.state.zoomX, this.state.zoomY);
-      };
-
-      applyTransform(this.notesContainer);
-      applyTransform(this.sustainContainer);
-      applyTransform(this.overlapOverlay);
+      // Legacy path: apply pan only; zoom encoded in regenerated geometry
+      this.notesContainer.position.set(this.state.panX, this.state.panY);
+      this.sustainContainer.position.set(this.state.panX, this.state.panY);
+      this.overlapOverlay.position.set(this.state.panX, this.state.panY);
     }
 
     // Ensure proper rendering order
@@ -606,7 +572,7 @@ export class PianoRoll {
       const avgTime = this.performanceMetrics.totalRenderTime / this.performanceMetrics.renderCount;
       console.debug(`[PianoRoll] Performance - Avg: ${avgTime.toFixed(2)}ms, Slow: ${this.performanceMetrics.slowRenders}/${this.performanceMetrics.renderCount}, Skipped: ${this.performanceMetrics.skippedRenders}`);
     }
-    console.debug(this.app.ticker.FPS)
+    // console.debug(this.app.ticker.FPS)
   }
 
   /**
@@ -617,6 +583,7 @@ export class PianoRoll {
     this.notes = notes;
     this.initializeScales(); // Recalculate scales based on new data
     this.needsNotesRedraw = true; // geometry must be rebuilt
+    this.needsSustainRedraw = true;
     this.render();
   }
 
@@ -671,7 +638,9 @@ export class PianoRoll {
     if (anchorX === undefined) {
       clampPanX(this.timeScale, this.state);
     }
-
+    // Zoom affects geometry (note widths and onset markers) -> redraw required
+    this.needsNotesRedraw = true;
+    this.needsSustainRedraw = true;
     this.requestRender();
   }
 
@@ -687,6 +656,9 @@ export class PianoRoll {
 
     // Ensure panY remains within bounds after zoom change
     clampPanY(this.pitchScale, this.state, this.options.height);
+    // Zoom affects geometry (row height, marker size) -> redraw required
+    this.needsNotesRedraw = true;
+    this.needsSustainRedraw = true;
     this.requestRender();
   }
 
@@ -747,6 +719,7 @@ export class PianoRoll {
     this.pxPerSecond = null;
     this.initializeScales();
     this.needsNotesRedraw = true;
+    this.needsSustainRedraw = true;
     this.requestRender();
   }
 
@@ -845,6 +818,7 @@ export class PianoRoll {
     this.controlChanges = controlChanges;
     // Mark for full note-layer redraw so sustain overlay refreshes
     this.needsNotesRedraw = true;
+    this.needsSustainRedraw = true;
     this.render();
   }
 }

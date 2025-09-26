@@ -11,7 +11,11 @@ import { SustainLayer } from "./sustain-layer";
  */
 export class CompositeTimelineLayer extends PIXI.Container {
   private renderTexture: PIXI.RenderTexture | null = null;
-  private sprite: PIXI.Sprite;
+  private readonly sprite: PIXI.Sprite;
+  private lastWidth = 0;
+  private lastUsableHeight = 0;
+  private lastZoomX = 0;
+  private lastZoomY = 0;// incremented externally via needsNotesRedraw toggles
 
   // Child layers that hold actual display objects
   public notesLayer: NotesLayer;
@@ -21,7 +25,7 @@ export class CompositeTimelineLayer extends PIXI.Container {
   constructor(notesLayer: NotesLayer, sustainLayer: SustainLayer, overlapOverlay?: PIXI.Graphics) {
     super();
     this.sortableChildren = true;
-    this.zIndex = 9; // below playhead and loop overlays, above background
+    this.zIndex = 9; // below play-head and loop overlays, above background
 
     this.notesLayer = notesLayer;
     this.sustainLayer = sustainLayer;
@@ -57,6 +61,8 @@ export class CompositeTimelineLayer extends PIXI.Container {
       this.sprite.texture = this.renderTexture;
       this.sprite.x = 0;
       this.sprite.y = 0;
+      this.lastWidth = pr.options.width;
+      this.lastUsableHeight = usableHeight;
     }
   }
 
@@ -67,20 +73,36 @@ export class CompositeTimelineLayer extends PIXI.Container {
   public render(pr: PianoRoll): void {
     this.ensureRenderTexture(pr);
 
-    // Apply pan/zoom via staging transforms around stable anchors
-    const pianoKeysOffset = pr.options.showPianoKeys ? 60 : 0;
-    const bandPadding = 6;
-    const bandHeight = Math.max(24, Math.min(96, Math.floor(pr.options.height * 0.22)));
-    const usableHeight = Math.max(0, pr.options.height - (bandPadding + bandHeight));
-    const pivotY = Math.floor(usableHeight / 2);
+    // Determine whether we must re-render the offscreen buffer
+    const mustRedraw =
+      // @ts-expect-error access private flag during migration
+      pr.needsNotesRedraw ||
+      (pr as any).needsSustainRedraw ||
+      (pr as any)._compositeForceRedraw === true ||
+      this.lastZoomX !== pr.state.zoomX ||
+      this.lastZoomY !== pr.state.zoomY ||
+      this.lastWidth !== pr.options.width ||
+      this.lastUsableHeight !== this.renderTexture!.height;
 
-    // @ts-expect-error internal staging reference
-    const staging: PIXI.Container = this._staging;
-    staging.pivot.set(pianoKeysOffset, pivotY);
-    staging.position.set(pianoKeysOffset + pr.state.panX, pivotY + pr.state.panY);
-    staging.scale.set(pr.state.zoomX, pr.state.zoomY);
+    if (mustRedraw) {
+      // Render staging at origin; pan will be applied by moving the sprite only (cheap)
+      // @ts-expect-error internal staging reference
+      const staging: PIXI.Container = this._staging;
+      staging.pivot.set(0, 0);
+      staging.position.set(0, 0);
+      staging.scale.set(1, 1);
+      pr.app.renderer.render({ container: staging, target: this.renderTexture!, clear: true });
 
-    // Render offscreen
-    pr.app.renderer.render({ container: staging, target: this.renderTexture!, clear: true });
+      this.lastZoomX = pr.state.zoomX;
+      this.lastZoomY = pr.state.zoomY;
+      this.lastWidth = pr.options.width;
+      // height already set in ensureRenderTexture
+      if ((pr as any)._compositeForceRedraw) {
+        (pr as any)._compositeForceRedraw = false;
+      }
+    }
+
+    // Cheap pan: just move the blitted sprite
+    this.sprite.position.set(pr.state.panX, pr.state.panY);
   }
 }

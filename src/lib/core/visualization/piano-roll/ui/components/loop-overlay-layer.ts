@@ -78,15 +78,16 @@ export class LoopOverlayLayer extends PIXI.Container {
       this.labelContainer.addChild(text);
     };
 
+    const pianoKeysOffset = pr.options.showPianoKeys ? 60 : 0;
     if (pr.loopStart !== null) {
-      startX = transform.timeToPixel(pr.loopStart) + pr.state.panX;
+      startX = pr.timeScale(pr.loopStart) * pr.state.zoomX + pianoKeysOffset + pr.state.panX;
       const colA = ColorCalculator.hexToNumber(COLOR_LOOP_LINE_A);
       drawDashed(this.loopLines.start, startX, colA, 14, 8);
       drawLine(this.loopLines.start, startX, colA, `A(${pr.loopStart.toFixed(1)}s)`);
     }
 
     if (pr.loopEnd !== null) {
-      endX = transform.timeToPixel(pr.loopEnd) + pr.state.panX;
+      endX = pr.timeScale(pr.loopEnd) * pr.state.zoomX + pianoKeysOffset + pr.state.panX;
       const colB = ColorCalculator.hexToNumber(COLOR_LOOP_LINE_B);
       drawDashed(this.loopLines.end, endX, colB, 2, 4);
       drawLine(this.loopLines.end, endX, colB, `B(${pr.loopEnd.toFixed(1)}s)`);

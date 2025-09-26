@@ -2,6 +2,10 @@ import * as PIXI from "pixi.js";
 import { PianoRoll } from "../piano-roll";
 import { clampPanX, clampPanY } from "../utils/clamp-pan";
 
+// Throttle state per instance to avoid spamming heavy external callbacks
+const lastEmitTs = new WeakMap<PianoRoll, number>();
+const EMIT_INTERVAL_MS = 33; // ~30fps
+
 export function onPointerDown(
   event: MouseEvent | TouchEvent,
   pianoRoll: PianoRoll
@@ -46,6 +50,16 @@ export function onPointerMove(
 
   // Update currentTime based on new panX so external UI can stay in sync.
   pianoRoll.state.currentTime = pianoRoll.computeTimeAtPlayhead();
+  // Notify listeners continuously while dragging so progress UI scrubs in real-time,
+  // but throttle to ~30fps to avoid excessive external work during drag.
+  if (pianoRoll.onTimeChangeCallback) {
+    const now = performance.now();
+    const last = lastEmitTs.get(pianoRoll) ?? 0;
+    if (now - last >= EMIT_INTERVAL_MS) {
+      lastEmitTs.set(pianoRoll, now);
+      pianoRoll.onTimeChangeCallback(pianoRoll.state.currentTime);
+    }
+  }
 
   pianoRoll.requestRender();
 }

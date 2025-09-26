@@ -424,7 +424,7 @@ export function renderNotes(pianoRoll: PianoRoll): void {
   const pitchMaxY = pianoRoll.pitchScale(pianoRoll.options.noteRange.max);
   const usablePitchSpanPx = Math.abs(pitchMinY - pitchMaxY);
   const baseRowHeight = usablePitchSpanPx / Math.max(1, noteRange);
-  // Geometry is computed at base zoom (1.0). Zoom/pan are applied via container transforms.
+  const zoomY = pianoRoll.state.zoomY;
 
   // 1) Ensure Sprite pool size matches notes.length -----------------------
   handleSprites(pianoRoll, PIXI.Texture.WHITE);
@@ -434,12 +434,12 @@ export function renderNotes(pianoRoll: PianoRoll): void {
   pianoRoll.notes.forEach((note: NoteData, idx: number) => {
     const sprite = pianoRoll.noteSprites[idx] as NoteSprite;
     // Compute geometry once; container pan is applied globally elsewhere.
-    const x = pianoRoll.timeScale(note.time) + pianoKeysOffset;
+    const x = pianoRoll.timeScale(note.time) * pianoRoll.state.zoomX + pianoKeysOffset;
     const yBase = pianoRoll.pitchScale(note.midi);
     const canvasMid = pianoRoll.options.height / 2;
-    const y = yBase; // base position; vertical zoom applied via container scale around canvasMid
-    const width = pianoRoll.timeScale(note.duration);
-    const height = Math.max(1, baseRowHeight * 0.8);
+    const y = (yBase - canvasMid) * zoomY + canvasMid;
+    const width = pianoRoll.timeScale(note.duration) * pianoRoll.state.zoomX;
+    const height = Math.max(1, baseRowHeight * 0.8 * zoomY);
 
     sprite.x = x;
     sprite.y = y - height / 2;
@@ -499,7 +499,8 @@ export function renderNotes(pianoRoll: PianoRoll): void {
     // but never exceed the current row height (leave small padding)
     const preferred = Math.max(8, style.size || 12);
     const maxByRow = Math.max(6, Math.floor(height * 0.9));
-    const sz = Math.max(6, Math.min(maxByRow, Math.floor(preferred)));
+    const target = preferred * zoomY;
+    const sz = Math.max(6, Math.min(maxByRow, Math.floor(target)));
     onsetSprite.width = sz;
     onsetSprite.height = sz;
     onsetSprite.x = sprite.x - sz / 2; // at note start

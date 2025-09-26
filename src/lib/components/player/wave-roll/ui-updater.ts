@@ -335,7 +335,6 @@ export class UIUpdater {
    * Update sidebar with current files
    */
   updateSidebar(sidebarContainer: HTMLElement): void {
-    UILayoutManager.updateSidebar(sidebarContainer, this.midiManager);
   }
 
   /**

@@ -1,7 +1,7 @@
 import { parseMidi } from "@/lib/core/parsers/midi-parser";
 import type { MidiInput } from "@/lib/midi/types";
 import { DEFAULT_SAMPLE_FILES } from "./constants";
-import { FileLoadOptions, SampleFileConfig, SampleAudioFileConfig } from "./types";
+import { FileLoadOptions, SampleAudioFileConfig, SampleFileConfig } from "./types";
 import { FileManager } from "./file-manager";
 import { addAudioFileFromUrl } from "@/lib/core/waveform/register";
 
@@ -140,8 +140,7 @@ export async function loadAudioFile(
     const name = options.name ?? (typeof input === "string" ? input : input.name);
 
     // Register in AudioFiles store and kick off waveform decoding lazily
-    const id = await addAudioFileFromUrl(fileManager, url, name, options.color);
-    return id;
+    return await addAudioFileFromUrl(fileManager, url, name, options.color);
   } catch (error) {
     console.error(`Failed to load audio file:`, error);
     return null;

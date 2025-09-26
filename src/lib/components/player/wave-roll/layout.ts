@@ -17,9 +17,6 @@ export function setupLayout(
 ): void {
   UILayoutManager.setupLayout(container, uiElements, uiDeps);
 
-  // Set up sidebar
-  UILayoutManager.setupSidebar(uiElements.sidebarContainer, uiDeps);
-
   // Attach piano-roll area to the player container (above the controls)
   pianoRollContainer.style.cssText = `
     width: 100%;
@@ -63,11 +60,4 @@ export function createDefaultConfig(): WaveRollPlayerOptions {
       updateInterval: 50,
     },
   };
-}
-
-export function setupFileToggleSection(
-  playerContainer: HTMLElement,
-  deps: UIComponentDependencies
-): HTMLElement {
-  return FileToggleManager.setupFileToggleSection(playerContainer, deps);
 }

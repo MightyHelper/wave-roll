@@ -8,10 +8,11 @@ export function onWheel(event: WheelEvent, pianoRoll: PianoRoll): void {
   const deltaY = event.deltaY;
   const deltaX = event.deltaX;
 
-  // Use cursor position as anchor only when user holds Ctrl/Cmd (precision zoom).
-  // Otherwise anchor to playhead so that the current playback point stays fixed.
-  const usePointerAnchor = event.ctrlKey || event.metaKey;
-  const anchorX = usePointerAnchor ? event.offsetX : undefined;
+  // Always zoom around the cursor position for intuitive control
+  // Use DOMRect to get a stable anchor in CSS pixels, then map to options.width space
+  const rect = pianoRoll.app.canvas.getBoundingClientRect();
+  const cssX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+  const anchorX = (cssX / rect.width) * pianoRoll.options.width;
 
   // Alt/Option + wheel => vertical (pitch) zoom for intuitive interaction
   if (event.altKey) {
@@ -40,8 +41,7 @@ export function onWheel(event: WheelEvent, pianoRoll: PianoRoll): void {
     return;
   }
 
-  // Ctrl/Cmd => precision zoom around cursor; otherwise zoom around playhead
-  // Default: zoomX (horizontal time zoom)
+  // Default: zoomX (horizontal time zoom) around cursor
   if (deltaY < 0) {
     pianoRoll.zoomX(zoomFactor, anchorX);
   } else {

@@ -10,66 +10,45 @@
  * is imported from `lib/components/ui/**`. That keeps the orchestration layer
  * small and easy to test.
  */
-import { NoteData, ControlChangeEvent } from "@/lib/midi/types";
 import { MultiMidiManager } from "@/lib/core/midi/multi-midi-manager";
-import { MidiFileItemList } from "@/lib/core/file/types";
+import { InputFileFormat } from "@/lib/core/file/types";
 import { WaveRollPlayerOptions } from "./types";
-import {
-  createDefaultConfig,
-  setupLayout,
-  setupFileToggleSection,
-} from "./layout";
-import {
-  VisualizationEngine,
-  DEFAULT_PIANO_ROLL_CONFIG,
-} from "@/core/visualization";
+import { createDefaultConfig, setupLayout, } from "./layout";
+import { DEFAULT_PIANO_ROLL_CONFIG, VisualizationEngine, } from "@/core/visualization";
 import { StateManager } from "@/core/state";
 import { FileManager } from "@/core/file";
 import { UIComponentDependencies, UIElements } from "@/lib/components/ui";
 import { formatTime } from "@/core/utils";
 import { ensureThemeStylesInjected } from "@/lib/components/ui/theme";
-import { UILayoutManager } from "@/lib/components/ui/layout-manager";
 import { FileToggleManager } from "@/lib/components/ui/file/toggle-manager";
 import { setupUI } from "@/lib/components/ui/controls";
-import { AudioPlayerContainer } from "@/core/audio";
 import {
-  CorePlaybackEngine,
-  createCorePlaybackEngine,
   createPianoRollManager,
   PianoRollConfig,
   PianoRollManager,
+  SilenceDetector,
 } from "@/core/playback";
-import {
-  computeNoteMetrics,
-  DEFAULT_TOLERANCES,
-} from "@/lib/evaluation/transcription";
-import { DEFAULT_SAMPLE_FILES } from "@/core/file/constants";
 
 // Import new handler modules
 import { VisualizationHandler } from "./visualization-handler";
 import { UIUpdater } from "./ui-updater";
 import { KeyboardHandler } from "./keyboard-handler";
 import { FileLoader } from "./file-loader";
-import { SilenceDetector } from "@/core/playback";
 
 /**
  * Demo for multiple MIDI files - Acts as orchestrator for extracted modules
  */
 export class WaveRollPlayer {
-  private container: HTMLElement;
-  private midiManager: MultiMidiManager;
+  private readonly container: HTMLElement;
+  private readonly midiManager: MultiMidiManager;
   public pianoRollManager: PianoRollManager | null = null;
-  private corePlaybackEngine: CorePlaybackEngine | null = null;
-
-  // Extracted modules
+// Extracted modules
   private stateManager!: StateManager;
   private fileManager!: FileManager;
   private visualizationEngine!: VisualizationEngine;
 
   // UI containers
-  private audioPlayerContainer: AudioPlayerContainer | null = null;
   private mainContainer!: HTMLElement;
-  private sidebarContainer!: HTMLElement;
   private playerContainer!: HTMLElement;
   private controlsContainer!: HTMLElement;
   private timeDisplay!: HTMLElement;
@@ -96,7 +75,7 @@ export class WaveRollPlayer {
   private config: WaveRollPlayerOptions;
 
   // Store initial files for initialization
-  private initialFileItemList: Array<{
+  private readonly initialFileItemList: Array<{
     path: string;
     name?: string;
     type?: "midi" | "audio";
@@ -111,9 +90,8 @@ export class WaveRollPlayer {
   private keyboardHandler!: KeyboardHandler;
   private fileLoader!: FileLoader;
   private silenceDetector!: SilenceDetector;
-  private pausedBySilence: boolean = false;
   private lastHookedAudioPlayer: any = null;
-  private audioVisualHooked: boolean = false;
+
 
   // UI permissions (used to drive readonly behavior in UI components)
   private permissions: { canAddFiles: boolean; canRemoveFiles: boolean } = {
@@ -130,11 +108,14 @@ export class WaveRollPlayer {
       const midiDur = st.duration || 0;
       let wavMax = 0;
       try {
-        const api = (globalThis as unknown as { _waveRollAudio?: { getFiles?: () => Array<{ audioBuffer?: AudioBuffer }> } })._waveRollAudio;
+        const api = (globalThis as unknown as {
+          _waveRollAudio?: { getFiles?: () => Array<{ audioBuffer?: AudioBuffer }> }
+        })._waveRollAudio;
         const files = api?.getFiles?.() || [];
         const durations = files.map((f) => f.audioBuffer?.duration || 0).filter((d) => d > 0);
         wavMax = durations.length > 0 ? Math.max(...durations) : 0;
-      } catch {}
+      } catch {
+      }
       const rawMax = Math.max(midiDur, wavMax);
       return speed > 0 ? rawMax / speed : rawMax;
     } catch {
@@ -176,7 +157,6 @@ export class WaveRollPlayer {
    */
   private createUIContainers(): void {
     this.mainContainer = document.createElement("div");
-    this.sidebarContainer = document.createElement("div");
     this.playerContainer = document.createElement("div");
     this.controlsContainer = document.createElement("div");
     this.timeDisplay = document.createElement("div");
@@ -209,7 +189,7 @@ export class WaveRollPlayer {
     });
 
     // Keep seek bar and time display tightly synced with the engine's visual updates.
-    this.visualizationEngine.onVisualUpdate(({ currentTime, duration, isPlaying }) => {
+    this.visualizationEngine.onVisualUpdate(({ currentTime }) => {
       // Always get fresh dependencies to ensure updateSeekBar is available
       const deps = this.getUIDependencies();
       // Use max(MIDI, WAV) with tempo/playback-rate awareness
@@ -231,7 +211,8 @@ export class WaveRollPlayer {
           });
           this.lastHookedAudioPlayer = ap;
         }
-      } catch {}
+      } catch {
+      }
     });
 
     this.pianoRollManager = createPianoRollManager();
@@ -248,16 +229,12 @@ export class WaveRollPlayer {
       onSilenceDetected: () => {
         // Auto-pause when all sources are silent
         if (this.visualizationEngine.getState().isPlaying) {
-          // console.log("Auto-pausing: all sources are silent");
-          this.pausedBySilence = true;
           this.visualizationEngine.pause();
           // Update play button UI to reflect paused state
           this.updatePlayButton();
         }
       },
       onSoundDetected: () => {
-        // Requirement: user must press the play button to resume (no auto-resume)
-        this.pausedBySilence = false;
         // console.log("Sound detected");
       }
     });
@@ -272,7 +249,7 @@ export class WaveRollPlayer {
       this.stateManager,
       this.visualizationEngine
     );
-    
+
     this.uiUpdater = new UIUpdater(
       this.stateManager,
       this.visualizationEngine,
@@ -290,31 +267,30 @@ export class WaveRollPlayer {
 
     // Track previous mute states to detect changes
     const previousMuteStates = new Map<string, boolean>();
-    
+
     // Now that handlers are ready, set up state change listeners
     this.midiManager.setOnStateChange(() => {
       if (this.stateManager.getUIState().isBatchLoading) return;
-      
+
       // Check for mute state changes and apply them via setFileMute
       const state = this.midiManager.getState();
       state.files.forEach((file: any) => {
         const prevMute = previousMuteStates.get(file.id) || false;
         const currMute = file.isMuted || false;
-        
+
         if (prevMute !== currMute) {
           // Apply mute change without recreating the audio player
           this.visualizationEngine.setFileMute(file.id, currMute);
           previousMuteStates.set(file.id, currMute);
         }
       });
-      
+
       // Check if all sources are silent and auto-pause if needed
       if (this.silenceDetector) {
         this.silenceDetector.checkSilence(this.midiManager);
       }
-      
+
       this.updateVisualization();
-      this.updateSidebar();
       this.updateFileToggleSection();
     });
 
@@ -322,7 +298,6 @@ export class WaveRollPlayer {
     this.stateManager.onStateChange(() => {
       if (this.stateManager.getUIState().isBatchLoading) return;
       this.updateVisualization();
-      this.updateSidebar();
       this.updateFileToggleSection();
     });
   }
@@ -332,9 +307,9 @@ export class WaveRollPlayer {
    */
   private getUIDependencies(): UIComponentDependencies {
     const uiState = this.stateManager.getUIState();
-    const playbackState = this.stateManager.getState().playback;
+    this.stateManager.getState().playback;
     const loopPoints = this.stateManager.getState().loopPoints;
-    const panVolumeState = this.stateManager.getState().panVolume;
+    this.stateManager.getState().panVolume;
 
     // Use direct references so that UI mutations persist across re-renders
     const filePanValuesRef = this.stateManager.getFilePanValuesRef();
@@ -363,8 +338,8 @@ export class WaveRollPlayer {
         seeking: uiState.seeking,
         updateSeekBar: () => this.updateSeekBar(),
         updatePlayButton: () => this.updatePlayButton(),
-        updateMuteState: (shouldMute: boolean) =>
-          this.updateMuteState(shouldMute),
+        updateMuteState: () => {
+        },
         openSettingsModal: () => this.openSettingsModal(),
         openEvaluationResultsModal: () => this.openEvaluationResultsModal(),
         formatTime: (seconds: number) => formatTime(seconds),
@@ -413,7 +388,6 @@ export class WaveRollPlayer {
   private getUIElements(): UIElements {
     return {
       mainContainer: this.mainContainer,
-      sidebarContainer: this.sidebarContainer,
       playerContainer: this.playerContainer,
       controlsContainer: this.controlsContainer,
       timeDisplay: this.timeDisplay,
@@ -485,7 +459,9 @@ export class WaveRollPlayer {
         // Persist on the shared dependencies object so the seek-bar update
         // function can access the latest values.
         const deps = this.getUIDependencies();
-        (deps as UIComponentDependencies & { loopPoints?: { a: number | null; b: number | null } | null }).loopPoints = lp;
+        (deps as UIComponentDependencies & {
+          loopPoints?: { a: number | null; b: number | null } | null
+        }).loopPoints = lp;
 
         // Also persist A/B markers into the StateManager (in seconds) so that
         // markers survive UI refreshes and re-renders even before enabling loop.
@@ -499,7 +475,8 @@ export class WaveRollPlayer {
             this.stateManager.setLoopPoints(aSec, bSec);
             // console.log("setLoopPoints", aSec, bSec);
           }
-        } catch {}
+        } catch {
+        }
 
         // Force a seek-bar refresh immediately for snappy feedback.
         // Use absolute (full-length) policy and reflect tempo/rate changes
@@ -520,10 +497,7 @@ export class WaveRollPlayer {
     );
 
     // 4) File-visibility toggle section (below controls)
-    this.fileToggleContainer = setupFileToggleSection(
-      uiElements.playerContainer,
-      depsReady
-    );
+    this.fileToggleContainer = FileToggleManager.setupFileToggleSection(uiElements.playerContainer, depsReady);
     uiElements.fileToggleContainer = this.fileToggleContainer;
 
     // Load initial files if provided
@@ -531,7 +505,6 @@ export class WaveRollPlayer {
       await this.loadSampleFiles(this.initialFileItemList);
     } else {
       // Don't load default files - just update UI to show empty state
-      this.updateSidebar();
       this.updateFileToggleSection();
     }
     // console.log("this.midiManager.getState()", this.midiManager.getState());
@@ -539,7 +512,6 @@ export class WaveRollPlayer {
     // Only compute metrics if we have at least 2 files
     const files = this.midiManager.getState().files;
     if (files.length >= 2) {
-      const custom = { ...DEFAULT_TOLERANCES, onsetTolerance: 0.03 };
       const ref = files[0].parsedData;
       const est = files[1].parsedData;
 
@@ -559,23 +531,6 @@ export class WaveRollPlayer {
   }
 
   /**
-   * Set up the sidebar
-   */
-  private setupSidebar(): void {
-    UILayoutManager.setupSidebar(
-      this.sidebarContainer,
-      this.getUIDependencies()
-    );
-  }
-
-  /**
-   * Update sidebar with current files
-   */
-  private updateSidebar(): void {
-    this.uiUpdater.updateSidebar(this.sidebarContainer);
-  }
-
-  /**
    * Load sample MIDI files
    */
   private async loadSampleFiles(
@@ -588,9 +543,8 @@ export class WaveRollPlayer {
     await this.fileLoader.loadSampleFiles(files, {
       onComplete: () => {
         this.updateVisualization();
-        this.updateSidebar();
         this.updateFileToggleSection();
-        
+
         // Initialize silence detector with all loaded files
         if (this.silenceDetector) {
           this.silenceDetector.checkSilence(this.midiManager);
@@ -603,14 +557,19 @@ export class WaveRollPlayer {
           const anyEngine = this.visualizationEngine as unknown as { coreEngine?: any };
           const audioPlayer = anyEngine.coreEngine?.audioPlayer;
           if (audioPlayer && typeof audioPlayer.setOnVisualUpdate === 'function') {
-            audioPlayer.setOnVisualUpdate(({ currentTime }: { currentTime: number; duration: number; isPlaying: boolean }) => {
+            audioPlayer.setOnVisualUpdate(({ currentTime }: {
+              currentTime: number;
+              duration: number;
+              isPlaying: boolean
+            }) => {
               const effectiveDuration = this.getEffectiveDuration();
               const deps = this.getUIDependencies();
               deps.updateSeekBar?.({ currentTime, duration: effectiveDuration });
               this.updateTimeDisplay(currentTime);
             });
           }
-        } catch {}
+        } catch {
+        }
       },
     });
   }
@@ -623,16 +582,6 @@ export class WaveRollPlayer {
       return;
     }
     this.visualizationHandler.updateVisualization();
-  }
-
-  /**
-   * Set up file toggle section
-   */
-  private setupFileToggleSection(): void {
-    this.fileToggleContainer = FileToggleManager.setupFileToggleSection(
-      this.playerContainer,
-      this.getUIDependencies()
-    );
   }
 
   /**
@@ -651,6 +600,7 @@ export class WaveRollPlayer {
   private startUpdateLoop(): void {
     this.uiUpdater.startUpdateLoop(this.uiDeps);
   }
+
   /**
    * Update seek bar
    */
@@ -673,16 +623,6 @@ export class WaveRollPlayer {
   private updateTimeDisplay(overrideTime?: number): void {
     this.uiUpdater.updateTimeDisplay(overrideTime, this.timeDisplay);
   }
-
-  /**
-   * Update mute state
-   */
-  private updateMuteState(shouldMute: boolean): void {
-    // Note: VisualizationEngine doesn't have handleChannelMute, 
-    // but this functionality might not be needed with the new architecture
-    // this.visualizationEngine.handleChannelMute?.(shouldMute);
-  }
-
   /**
    * Open settings modal
    */
@@ -702,7 +642,7 @@ export class WaveRollPlayer {
     if (deps) {
       const mod = await import(
         "@/lib/components/ui/settings/modal/evaluation-results"
-      );
+        );
       mod.openEvaluationResultsModal(deps);
     }
   }
@@ -740,7 +680,7 @@ export class WaveRollPlayer {
 
   public get isPlaying(): boolean {
     try {
-      return !!this.visualizationEngine.getState().isPlaying;
+      return this.visualizationEngine.getState().isPlaying;
     } catch {
       return false;
     }
@@ -764,18 +704,16 @@ export class WaveRollPlayer {
     }
     // Refresh UI surfaces that may depend on permissions
     try {
-      this.updateSidebar();
       this.updateFileToggleSection();
-    } catch {}
+    } catch {
+    }
   }
 }
 
 /**
  * Factory function to create multi MIDI demo
  */
-export async function createWaveRollPlayer(
-  container: HTMLElement,
-  files: Array<{ path: string; name?: string }> = []
+export async function createWaveRollPlayer(container: HTMLElement, files: Array<InputFileFormat> = []
 ): Promise<WaveRollPlayer> {
   const demo = new WaveRollPlayer(container, files);
   await demo.initialize();
