@@ -2,8 +2,8 @@ import * as PIXI from "pixi.js";
 import { PianoRoll } from "../piano-roll";
 import type { WaveRollAudioAPI } from "@/lib/core/waveform/types";
 import { COLOR_LOOP_SHADE, COLOR_LOOP_LINE_A, COLOR_LOOP_LINE_B } from "@/lib/core/constants";
-import { 
-  createCoordinateTransform, 
+import {
+  createCoordinateTransform,
   getVisibleTimeRange,
   DrawingPrimitives,
   ColorCalculator
@@ -373,14 +373,14 @@ export function renderGrid(pianoRoll: PianoRoll): void {
             0,
             pianoRoll.timeScale.invert(
               (0 - pianoKeysOffset - pianoRoll.state.panX) /
-                pianoRoll.state.zoomX
+              pianoRoll.state.zoomX
             )
           );
           const tKeys1 = Math.min(
             pianoRoll.timeScale.domain()[1],
             pianoRoll.timeScale.invert(
               (pianoRoll.playheadX - pianoKeysOffset - pianoRoll.state.panX) /
-                pianoRoll.state.zoomX
+              pianoRoll.state.zoomX
             )
           );
 
