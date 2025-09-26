@@ -29,6 +29,11 @@ export interface PianoRollConfig {
   minorTimeStep?: number;
   /** Custom note renderer function to determine color per note */
   noteRenderer?: (note: NoteData, index: number) => number;
+  /**
+   * Prefer offscreen composite rendering (no runtime masks) when true.
+   * Falls back to legacy mask-based path when false.
+   */
+  useCompositeRendering?: boolean;
 }
 
 /**

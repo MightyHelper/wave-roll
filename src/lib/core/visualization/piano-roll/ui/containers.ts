@@ -1,5 +1,11 @@
 import * as PIXI from "pixi.js";
 import type { PianoRoll } from "../piano-roll";
+import { BackgroundLayer } from "./components/background-layer";
+import { NotesLayer } from "./components/notes-layer";
+import { SustainLayer } from "./components/sustain-layer";
+import { CompositeTimelineLayer } from "./components/composite-timeline-layer";
+import { PlayheadLayer } from "./components/playhead-layer";
+import { LoopOverlayLayer } from "./components/loop-overlay-layer";
 
 /**
  * Initialize Pixi containers and display list for the piano roll instance.
@@ -11,77 +17,76 @@ export function initializeContainers(pr: PianoRoll): void {
   pr.container.sortableChildren = true; // Enable z-index sorting
   pr.app.stage.addChild(pr.container);
 
-  // Background grid container
-  pr.backgroundGrid = new PIXI.Graphics();
-  pr.backgroundGrid.zIndex = 1;
-  pr.container.addChild(pr.backgroundGrid);
-
-  // Waveform layer (below grid)
-  pr.waveformLayer = new PIXI.Graphics();
-  pr.waveformLayer.zIndex = 0;
-  pr.container.addChild(pr.waveformLayer);
-
-  // Waveform layer shown above piano-keys fill so it is visible left of playhead
-  pr.waveformKeysLayer = new PIXI.Graphics();
-  // Keep it below notes and loop overlays, but above background grid fill
-  // Use the same zIndex as labels but add before them so labels stay on top
-  pr.waveformKeysLayer.zIndex = 2;
-  pr.container.addChild(pr.waveformKeysLayer);
-
-  // Container for time grid labels (kept separate to avoid addChild on Graphics)
-  pr.backgroundLabelContainer = new PIXI.Container();
-  pr.backgroundLabelContainer.zIndex = 2;
-  pr.container.addChild(pr.backgroundLabelContainer);
+  // Background component encapsulating grid/labels/waveforms/loop overlays
+  const bgLayer = new BackgroundLayer();
+  pr.container.addChild(bgLayer);
+  // Map legacy fields to internal graphics for compatibility
+  pr.backgroundGrid = bgLayer.backgroundGrid;
+  pr.waveformLayer = bgLayer.waveformLayer;
+  pr.waveformKeysLayer = bgLayer.waveformKeysLayer;
+  pr.backgroundLabelContainer = bgLayer.backgroundLabelContainer;
+  // Keep a reference to the component for new-style rendering
+  // @ts-expect-error attach private ref without changing public API yet
+  pr._backgroundLayer = bgLayer as unknown as PIXI.Container;
 
   // Notes container for all note rectangles
-  pr.notesContainer = new PIXI.Container();
-  pr.notesContainer.zIndex = 10;
-  pr.container.addChild(pr.notesContainer);
+  const notesLayer = new NotesLayer();
+  pr.container.addChild(notesLayer);
+  pr.notesContainer = notesLayer;
+  // Private reference for delegation
+  // @ts-expect-error migration-only private field
+  pr._notesLayer = notesLayer as unknown as PIXI.Container;
 
-  // Mask that clips out the bottom waveform band area from the notes/sustains
+  // Mask that clips out the bottom waveform band area from the notes/sustains (legacy path)
   pr.notesMask = new PIXI.Graphics();
   pr.container.addChild(pr.notesMask);
   pr.notesContainer.mask = pr.notesMask;
 
-  pr.sustainContainer = new PIXI.Container();
-  pr.sustainContainer.zIndex = 5;
-  pr.container.addChild(pr.sustainContainer);
+  const sustainLayer = new SustainLayer();
+  pr.container.addChild(sustainLayer);
+  pr.sustainContainer = sustainLayer;
   // Apply same mask so sustain overlays also avoid the waveform area
   pr.sustainContainer.mask = pr.notesMask;
-
-  // Overlay for sustain pedal (below notes to avoid covering them)
-  pr.sustainOverlay = new PIXI.Graphics();
-  pr.sustainOverlay.zIndex = -10; // ensure below note sprites
-  pr.sustainContainer.addChild(pr.sustainOverlay);
-
-  // Playhead line (always on top)
-  pr.playheadLine = new PIXI.Graphics();
-  pr.playheadLine.zIndex = 1000;
-  pr.container.addChild(pr.playheadLine);
-
-  // Overlay for loop window
-  pr.loopOverlay = new PIXI.Graphics();
-  pr.loopOverlay.zIndex = 500; // below playhead but above notes
-  pr.container.addChild(pr.loopOverlay);
+  // Map legacy overlay handle for renderer compatibility (if any)
+  pr.sustainOverlay = sustainLayer.overlay;
+  // Private reference for delegation
+  // @ts-expect-error migration-only private field
+  pr._sustainLayer = sustainLayer as unknown as PIXI.Container;
 
   // Overlay for multi-track overlaps (semi-transparent red)
   pr.overlapOverlay = new PIXI.Graphics();
   pr.overlapOverlay.zIndex = 20; // above grid, below notes
-  pr.container.addChild(pr.overlapOverlay);
+  // This may be rendered inside the composite timeline layer
 
-  // Container for loop A/B labels
-  pr.loopLabelContainer = new PIXI.Container();
-  pr.loopLabelContainer.zIndex = 600; // alongside loop lines
-  pr.container.addChild(pr.loopLabelContainer);
+  if (pr.options.useCompositeRendering) {
+    // Composite timeline offscreen blit layer to avoid masks
+    const composite = new CompositeTimelineLayer(notesLayer, sustainLayer, pr.overlapOverlay);
+    pr.container.addChild(composite);
+    // Private ref for render delegation
+    // @ts-expect-error migration-only private field
+    pr._compositeTimelineLayer = composite as unknown as PIXI.Container;
+    // Since we are using offscreen composite rendering, disable runtime masks
+    pr.notesContainer.mask = null as unknown as PIXI.Graphics;
+    pr.sustainContainer.mask = null as unknown as PIXI.Graphics;
+  }
 
-  // Vertical lines for A (start) and B (end)
-  const startLine = new PIXI.Graphics();
-  const endLine = new PIXI.Graphics();
-  startLine.zIndex = 600;
-  endLine.zIndex = 600;
-  pr.container.addChild(startLine);
-  pr.container.addChild(endLine);
-  pr.loopLines = { start: startLine, end: endLine };
+  // Playhead layer (always on top)
+  const playheadLayer = new PlayheadLayer();
+  pr.container.addChild(playheadLayer);
+  pr.playheadLine = playheadLayer.line;
+  // Private ref for delegation
+  // @ts-expect-error migration-only private field
+  pr._playheadLayer = playheadLayer as unknown as PIXI.Container;
+
+  // Loop overlay layer
+  const loopLayer = new LoopOverlayLayer();
+  pr.container.addChild(loopLayer);
+  pr.loopOverlay = loopLayer.overlay;
+  pr.loopLabelContainer = loopLayer.labelContainer;
+  pr.loopLines = loopLayer.loopLines;
+  // Private ref for delegation
+  // @ts-expect-error migration-only private field
+  pr._loopOverlayLayer = loopLayer as unknown as PIXI.Container;
 }
 
 

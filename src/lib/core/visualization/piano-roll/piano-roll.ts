@@ -9,8 +9,9 @@ import {
 } from "@/lib/core/visualization/piano-roll/interactions/pointer";
 import { onWheel } from "@/lib/core/visualization/piano-roll/interactions/wheel";
 import { pinchStart, pinchMove, pinchEnd } from "@/lib/core/visualization/piano-roll/interactions/pinch";
+// Playhead is now handled by PlayheadLayer when available
 import { renderPlayhead } from "@/lib/core/visualization/piano-roll/renderers/playhead";
-import { renderGrid } from "@/lib/core/visualization/piano-roll/renderers/grid";
+// Background grid/waveform/loop overlays are now handled by BackgroundLayer component
 import { renderNotes } from "@/lib/core/visualization/piano-roll/renderers/notes";
 import { renderSustains } from "@/lib/core/visualization/piano-roll/renderers/sustains";
 import { initializeTooltipOverlay, initializeHelpOverlay } from "@/lib/core/visualization/piano-roll/ui/overlays";
@@ -133,6 +134,7 @@ export class PianoRoll {
       backgroundColor: 0xffffff,
       noteColor: 0x4285f4,
       playheadColor: 0x1e40af,
+      useCompositeRendering: true,
       showPianoKeys: true,
       noteRange: { min: 21, max: 108 }, // A0 to C8
       timeStep: 1,
@@ -218,12 +220,12 @@ export class PianoRoll {
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
     });
-    // console.log(
-    //   "[initializeApp] renderer",
-    //   this.app.renderer.resolution,
-    //   this.app.renderer.width,
-    //   this.app.renderer.height
-    // );
+    console.log(
+      "[initializeApp] renderer",
+      this.app.renderer.resolution,
+      this.app.renderer.width,
+      this.app.renderer.height
+    );
   }
 
   /**
@@ -480,29 +482,7 @@ export class PianoRoll {
    * Request render with throttling for performance
    */
   public requestRender(): void {
-    // Cancel any pending RAF to prevent duplicates
-    if (this.rafId !== null) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = null;
-    }
-    
-    const now = performance.now();
-    const timeSinceLastRender = now - this.lastRenderTime;
-    
-    if (timeSinceLastRender >= this.renderThrottleMs) {
-      // Enough time has passed, render immediately
-      this.lastRenderTime = now;
-      this.render();
-    } else {
-      // Schedule render for the next frame
-      this.performanceMetrics.skippedRenders++;
-      const delay = this.renderThrottleMs - timeSinceLastRender;
-      this.rafId = requestAnimationFrame(() => {
-        this.rafId = null;
-        this.lastRenderTime = performance.now();
-        this.render();
-      });
-    }
+    this.render();
   }
 
   /**
@@ -515,8 +495,11 @@ export class PianoRoll {
     // Update playhead first so that its computed X position is available
     // to background and note layers (e.g., pianoKeys shading uses playheadX).
 
-    // Update mask for notes/sustains prior to drawing
-    {
+    // Update mask for notes/sustains prior to drawing (legacy path only).
+    // When using the composite offscreen layer we avoid runtime masks entirely.
+    // @ts-expect-error migration-only private ref
+    const hasComposite = Boolean((this as any)._compositeTimelineLayer?.render);
+    if (!hasComposite) {
       const bandPadding = 6;
       const bandHeight = Math.max(
         24,
@@ -529,34 +512,82 @@ export class PianoRoll {
       this.notesMask.fill({ color: 0xffffff, alpha: 1 });
     }
 
-    renderPlayhead(this);
-    renderGrid(this);
+    // Playhead via component if available (fallback to legacy renderer otherwise)
+    // @ts-expect-error migration-only private ref
+    if ((this as any)._playheadLayer?.render) {
+      // @ts-expect-error index signature
+      (this as any)._playheadLayer.render(this);
+    } else {
+      renderPlayhead(this);
+    }
+    // Delegate background rendering to component created in initializeContainers()
+    // @ts-expect-error private attachment for migration phase
+    if ((this as any)._backgroundLayer?.render) {
+      // @ts-expect-error index signature
+      (this as any)._backgroundLayer.render(this);
+    }
+
+    // Loop overlay (A/B lines and shade)
+    // @ts-expect-error migration-only private ref
+    if ((this as any)._loopOverlayLayer?.render) {
+      // @ts-expect-error index signature
+      (this as any)._loopOverlayLayer.render(this);
+    }
 
     // Only re-generate note geometry when required; otherwise we simply shift
     // the container horizontally (pan) which is much cheaper than rebuilding
     // thousands of Graphics paths every frame.
     if (this.needsNotesRedraw) {
-      renderNotes(this);
+      // Prefer component-based rendering when available
+      // @ts-expect-error migration-only private ref
+      if ((this as any)._notesLayer?.render) {
+        // @ts-expect-error index signature
+        (this as any)._notesLayer.render(this);
+      } else {
+        renderNotes(this);
+      }
       this.needsNotesRedraw = false;
     }
 
     // Redraw sustain-pedal overlay so it reflects current pan/zoom
-    renderSustains(this);
+    // Prefer component-based sustain overlay rendering
+    // @ts-expect-error migration-only private ref
+    if ((this as any)._sustainLayer?.render) {
+      // @ts-expect-error index signature
+      (this as any)._sustainLayer.render(this);
+    } else {
+      renderSustains(this);
+    }
 
-    // Apply horizontal & vertical pan via container transforms so we avoid
-    // recalculating geometry for thousands of notes on every scroll.
-    this.notesContainer.x = this.state.panX;
-    this.notesContainer.y = this.state.panY;
+    // Render composite timeline (notes + sustain + overlaps) offscreen and blit
+    // @ts-expect-error migration-only private ref
+    if ((this as any)._compositeTimelineLayer?.render) {
+      // @ts-expect-error index signature
+      (this as any)._compositeTimelineLayer.render(this);
+    } else {
+      // Legacy path: apply transforms directly
+      const pianoKeysOffset = this.options.showPianoKeys ? 60 : 0;
+      const bandPadding = 6;
+      const bandHeight = Math.max(24, Math.min(96, Math.floor(this.options.height * 0.22)));
+      const usableHeight = Math.max(0, this.options.height - (bandPadding + bandHeight));
+      const pivotY = Math.floor(usableHeight / 2);
 
-    // Keep sustain & overlap overlays aligned with the notes layer.
-    this.sustainContainer.x = this.state.panX;
-    this.sustainContainer.y = this.state.panY;
+      const applyTransform = (obj: PIXI.Container | PIXI.Graphics) => {
+        // @ts-expect-error PIXI.DisplayObject has pivot on Container/Graphics
+        obj.pivot.set(pianoKeysOffset, pivotY);
+        // @ts-expect-error position exists on DisplayObject
+        obj.position.set(pianoKeysOffset + this.state.panX, pivotY + this.state.panY);
+        // @ts-expect-error scale exists on DisplayObject
+        obj.scale.set(this.state.zoomX, this.state.zoomY);
+      };
 
-    this.overlapOverlay.x = this.state.panX;
-    this.overlapOverlay.y = this.state.panY;
+      applyTransform(this.notesContainer);
+      applyTransform(this.sustainContainer);
+      applyTransform(this.overlapOverlay);
+    }
 
     // Ensure proper rendering order
-    this.container.sortChildren();
+    // this.container.sortChildren();
     
     // Performance monitoring end
     const renderEnd = performance.now();
@@ -573,15 +604,16 @@ export class PianoRoll {
     // Log every 100 renders
     if (this.performanceMetrics.renderCount % 100 === 0) {
       const avgTime = this.performanceMetrics.totalRenderTime / this.performanceMetrics.renderCount;
-      // console.log(`[PianoRoll] Performance - Avg: ${avgTime.toFixed(2)}ms, Slow: ${this.performanceMetrics.slowRenders}/${this.performanceMetrics.renderCount}, Skipped: ${this.performanceMetrics.skippedRenders}`);
+      console.debug(`[PianoRoll] Performance - Avg: ${avgTime.toFixed(2)}ms, Slow: ${this.performanceMetrics.slowRenders}/${this.performanceMetrics.renderCount}, Skipped: ${this.performanceMetrics.skippedRenders}`);
     }
+    console.debug(this.app.ticker.FPS)
   }
 
   /**
    * Set note data and trigger re-render
    */
   public setNotes(notes: NoteData[]): void {
-    // console.log("[setNotes] incoming notes", notes.length);
+    console.debug("[setNotes] incoming notes", notes.length);
     this.notes = notes;
     this.initializeScales(); // Recalculate scales based on new data
     this.needsNotesRedraw = true; // geometry must be rebuilt
@@ -640,9 +672,6 @@ export class PianoRoll {
       clampPanX(this.timeScale, this.state);
     }
 
-    // Changing zoom affects note width -> full redraw required
-    this.needsNotesRedraw = true;
-
     this.requestRender();
   }
 
@@ -658,9 +687,6 @@ export class PianoRoll {
 
     // Ensure panY remains within bounds after zoom change
     clampPanY(this.pitchScale, this.state, this.options.height);
-
-    // Changing vertical zoom affects note height & grid spacing → full redraw
-    this.needsNotesRedraw = true;
     this.requestRender();
   }
 
@@ -691,8 +717,6 @@ export class PianoRoll {
     this.state.panY = 0;
     clampPanX(this.timeScale, this.state);
     clampPanY(this.pitchScale, this.state, this.options.height);
-    // Geometry changes due to zoom reset require full redraw
-    this.needsNotesRedraw = true;
     this.requestRender();
   }
 
