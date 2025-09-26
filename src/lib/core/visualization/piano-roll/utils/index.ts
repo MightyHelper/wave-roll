@@ -12,4 +12,4 @@ export * from './render-optimizer';
 export * from './scales';
 export * from './sprite-pool-manager';
 export * from './texture-cache';
-export * from './text-cache'
+export * from './text-cache';
