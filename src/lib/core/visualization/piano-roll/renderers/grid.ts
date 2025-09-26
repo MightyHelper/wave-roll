@@ -6,10 +6,11 @@ import {
   createCoordinateTransform,
   getVisibleTimeRange,
   DrawingPrimitives,
-  ColorCalculator
+  ColorCalculator,
+  textCache
 } from "../utils";
+
 // import { drawOverlapRegions } from "./overlaps"; // kept for future use
-import { textCache } from "../utils/text-cache";
 
 export function renderGrid(pianoRoll: PianoRoll): void {
   // Clear previous labels to avoid duplicates and stale objects
