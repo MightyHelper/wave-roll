@@ -24,14 +24,6 @@ export class FileVolumeControl {
   private onVolumeChange?: (volume: number) => void;
   private suppressOnChange: boolean = false;
   private handleMasterMirrorBound?: (e: Event) => void;
-  private clickHandler?: (e: Event) => void;
-  private mouseEnterHandler?: () => void;
-  private focusHandler?: () => void;
-  private sliderMouseEnterHandler?: () => void;
-  private sliderMouseLeaveHandler?: () => void;
-  private containerMouseLeaveHandler?: () => void;
-  private sliderInputHandler?: (e: Event) => void;
-  private keydownHandler?: (e: KeyboardEvent) => void;
 
   constructor(options: VolumeControlOptions = {}) {
     this.currentVolume = options.initialVolume ?? 1.0;
@@ -212,7 +204,7 @@ export class FileVolumeControl {
 
   private setupEventHandlers(): void {
     // Volume button click - toggle mute
-    this.clickHandler = (e: Event) => {
+    this.volumeBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       if (this.currentVolume > 0) {
         this.lastNonZeroVolume = this.currentVolume;
@@ -220,32 +212,30 @@ export class FileVolumeControl {
       } else {
         this.setVolume(this.lastNonZeroVolume);
       }
-    };
-    this.volumeBtn.addEventListener("click", this.clickHandler);
+    });
 
     // Show slider on hover/focus
-    this.mouseEnterHandler = () => this.showSlider();
-    this.focusHandler = () => this.showSlider();
-    this.volumeBtn.addEventListener("mouseenter", this.mouseEnterHandler);
-    this.volumeBtn.addEventListener("focus", this.focusHandler);
-
-    this.sliderMouseEnterHandler = () => this.clearHideTimeout();
-    this.sliderMouseLeaveHandler = () => this.hideSliderDelayed();
-    this.containerMouseLeaveHandler = () => this.hideSliderDelayed();
-    this.sliderContainer.addEventListener("mouseenter", this.sliderMouseEnterHandler);
-    this.sliderContainer.addEventListener("mouseleave", this.sliderMouseLeaveHandler);
-    this.container.addEventListener("mouseleave", this.containerMouseLeaveHandler);
+    this.volumeBtn.addEventListener("mouseenter", () => this.showSlider());
+    this.volumeBtn.addEventListener("focus", () => this.showSlider());
+    this.sliderContainer.addEventListener("mouseenter", () =>
+      this.clearHideTimeout()
+    );
+    this.sliderContainer.addEventListener("mouseleave", () =>
+      this.hideSliderDelayed()
+    );
+    this.container.addEventListener("mouseleave", () =>
+      this.hideSliderDelayed()
+    );
 
     // Slider input - direct mapping (bottom=0, top=100)
-    this.sliderInputHandler = (e: Event) => {
+    this.slider.addEventListener("input", (e) => {
       const rawValue = parseInt((e.target as HTMLInputElement).value);
       const value = rawValue / 100;
       this.setVolume(value);
-    };
-    this.slider.addEventListener("input", this.sliderInputHandler);
+    });
 
     // Keyboard navigation
-    this.keydownHandler = (e: KeyboardEvent) => {
+    this.container.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         this.hideSlider();
         this.volumeBtn.focus();
@@ -256,8 +246,7 @@ export class FileVolumeControl {
         e.preventDefault();
         this.setVolume(Math.max(0, this.currentVolume - 0.05));
       }
-    };
-    this.container.addEventListener("keydown", this.keydownHandler);
+    });
   }
 
   private showSlider(): void {
@@ -336,56 +325,10 @@ export class FileVolumeControl {
 
   public destroy(): void {
     this.clearHideTimeout();
-
-    // Remove all event listeners
     if (this.handleMasterMirrorBound) {
       window.removeEventListener('wr-master-mirror', this.handleMasterMirrorBound);
       this.handleMasterMirrorBound = undefined;
     }
-
-    if (this.clickHandler) {
-      this.volumeBtn.removeEventListener("click", this.clickHandler);
-      this.clickHandler = undefined;
-    }
-
-    if (this.mouseEnterHandler) {
-      this.volumeBtn.removeEventListener("mouseenter", this.mouseEnterHandler);
-      this.mouseEnterHandler = undefined;
-    }
-
-    if (this.focusHandler) {
-      this.volumeBtn.removeEventListener("focus", this.focusHandler);
-      this.focusHandler = undefined;
-    }
-
-    if (this.sliderMouseEnterHandler) {
-      this.sliderContainer.removeEventListener("mouseenter", this.sliderMouseEnterHandler);
-      this.sliderMouseEnterHandler = undefined;
-    }
-
-    if (this.sliderMouseLeaveHandler) {
-      this.sliderContainer.removeEventListener("mouseleave", this.sliderMouseLeaveHandler);
-      this.sliderMouseLeaveHandler = undefined;
-    }
-
-    if (this.containerMouseLeaveHandler) {
-      this.container.removeEventListener("mouseleave", this.containerMouseLeaveHandler);
-      this.containerMouseLeaveHandler = undefined;
-    }
-
-    if (this.sliderInputHandler) {
-      this.slider.removeEventListener("input", this.sliderInputHandler);
-      this.sliderInputHandler = undefined;
-    }
-
-    if (this.keydownHandler) {
-      this.container.removeEventListener("keydown", this.keydownHandler);
-      this.keydownHandler = undefined;
-    }
-
-    // Remove DOM element
-    if (this.container.parentNode) {
-      this.container.parentNode.removeChild(this.container);
-    }
+    this.container.remove();
   }
 }
