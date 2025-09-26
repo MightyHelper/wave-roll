@@ -9,6 +9,7 @@ import {
   ColorCalculator
 } from "../utils";
 // import { drawOverlapRegions } from "./overlaps"; // kept for future use
+import { textCache } from "../utils/text-cache";
 
 export function renderGrid(pianoRoll: PianoRoll): void {
   // Clear previous labels to avoid duplicates and stale objects
@@ -115,17 +116,20 @@ export function renderGrid(pianoRoll: PianoRoll): void {
     );
 
     if (showLabel) {
-      const label = new PIXI.Text({
-        text: tVal.toFixed(1) + "s",
-        style: {
+      const label = textCache.getText(
+        tVal.toFixed(1) + "s",
+        {
           fontSize: 10,
           fill: 0x555555,
           align: "center",
-        },
-      });
+        }
+      );
       label.x = x + 2;
       label.y = pianoRoll.options.height - 14;
       pianoRoll.backgroundLabelContainer.addChild(label);
+      let c = pianoRoll.backgroundLabelContainer.children.length
+      if (c > 50)
+        console.log(`Piano roll label count: ${c}`)
     }
   };
 
@@ -206,14 +210,14 @@ export function renderGrid(pianoRoll: PianoRoll): void {
       g.lineTo(x, pianoRoll.options.height);
       g.stroke({ width: lineWidth, color, alpha: 1 });
 
-      const text = new PIXI.Text({
-        text: label,
-        style: {
+      const text = textCache.getText(
+        label,
+        {
           fontSize: 11,
           fill: color,
           align: "center",
-        },
-      });
+        }
+      );
       text.x = x + 2;
       text.y = 0;
       pianoRoll.loopLabelContainer.addChild(text);
