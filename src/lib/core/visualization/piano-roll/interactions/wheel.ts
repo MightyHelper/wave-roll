@@ -16,11 +16,8 @@ export function onWheel(event: WheelEvent, pianoRoll: PianoRoll): void {
 
   // Alt/Option + wheel => vertical (pitch) zoom for intuitive interaction
   if (event.altKey) {
-    if (deltaY < 0) {
-      pianoRoll.zoomY(zoomFactor);
-    } else {
-      pianoRoll.zoomY(1 / zoomFactor);
-    }
+    if (deltaY < 0) pianoRoll.zoomY(zoomFactor);
+    else pianoRoll.zoomY(1 / zoomFactor);
     return;
   }
 
@@ -34,9 +31,7 @@ export function onWheel(event: WheelEvent, pianoRoll: PianoRoll): void {
     clampPanX(pianoRoll.timeScale, pianoRoll.state);
     // Keep UI in sync with new time under playhead
     pianoRoll.state.currentTime = pianoRoll.computeTimeAtPlayhead();
-    if (pianoRoll.onTimeChangeCallback) {
-      pianoRoll.onTimeChangeCallback(pianoRoll.state.currentTime);
-    }
+    pianoRoll.onTimeChangeCallback?.(pianoRoll.state.currentTime);
     pianoRoll.requestRender();
     return;
   }

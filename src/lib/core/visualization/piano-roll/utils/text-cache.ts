@@ -5,7 +5,10 @@ import * as PIXI from "pixi.js";
 
 class TextCache {
   private cache = new Map<string, PIXI.Text>();
-
+  public stats: {hits: number, misses: number} = {
+    hits: 0,
+    misses: 0
+  }
   /**
    * Get or create a cached PIXI.Text object
    * @param text - The text content
@@ -16,8 +19,10 @@ class TextCache {
     const key = this.createKey(text, style);
 
     if (!this.cache.has(key)) {
-      console.debug(`New entry in text cache: ${text}`)
+      this.stats.misses++;
       this.cache.set(key, new PIXI.Text({text, style}));
+    } else {
+      this.stats.hits++;
     }
 
     const cachedText = this.cache.get(key)!;

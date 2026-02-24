@@ -3,7 +3,7 @@ import { PianoRollViewState } from "../types";
 import { clamp } from "@/core/utils";
 
 export function clampPanX(
-  timeScale: ScaleLinear<number, number>,
+  timeScale: ScaleLinear,
   state: PianoRollViewState
 ): void {
   const contentWidth = timeScale.range()[1] * state.zoomX;
@@ -14,7 +14,7 @@ export function clampPanX(
 }
 
 export function clampPanY(
-  pitchScale: ScaleLinear<number, number>,
+  pitchScale: ScaleLinear,
   state: PianoRollViewState,
   viewportHeight: number
 ): void {

@@ -5,6 +5,7 @@ import { NoteData } from "@/lib/midi/types";
 import type { OnsetMarkerShape, OnsetMarkerStyle } from "@/types";
 import { COLOR_EVAL_HIGHLIGHT } from "@/lib/core/constants";
 import { toNumberColor } from "@/components/player/wave-roll/evaluation/colors";
+import { NoteSprite as NoteSpriteClass } from "./note-sprite";
 
 // Cache for hatch textures keyed by orientation to avoid recreating
 let WR_HATCH_TEXTURE_CACHE: Partial<Record<"up" | "down", PIXI.Texture>> = {};
@@ -13,11 +14,8 @@ let WR_PATTERN_TEXTURE_CACHE: Partial<Record<"up" | "down" | "cross" | "dots", P
 // Onset shape textures cached by shape+variant+stroke+color to avoid recreating
 let WR_ONSET_TEXTURE_CACHE: Record<string, PIXI.Texture> = {};
 
-// Extend PIXI.Sprite to tag the originating note (for tooltips)
-interface NoteSprite extends PIXI.Sprite {
-  noteData?: NoteData;
-  labelText?: PIXI.Text;
-}
+// NOTE: `NoteSprite` is now a class implemented in `note-sprite.ts`.
+// The interface alias previously exported from this file was removed.
 
 // Renderer-local augmentation for optional caches/flags on PianoRoll.
 // This keeps the external/public API clean without using `any`.
@@ -306,22 +304,11 @@ function getHatchTexture(direction: "up" | "down" = "up"): PIXI.Texture {
 }
 
 function handleSprites(pianoRoll: PianoRoll, baseTexture: PIXI.Texture<PIXI.BufferImageSource>) {
+  // console.debug(`Have ${pianoRoll.noteSprites.length} sprites, need ${pianoRoll.notes.length}`)
   // Prepare diagonal-hatch textures for overlay with emphasized visibility
   while (pianoRoll.noteSprites.length < pianoRoll.notes.length) {
-    const sprite = new PIXI.Sprite(baseTexture) as NoteSprite;
-    // Enable pointer interactions to show tooltip on hover
-    sprite.eventMode = "static"; // Pixi v8: enables hit-testing but non-draggable
-    sprite.cursor = "pointer";
-
-    // Pointer events for tooltip -----------------------------
-    sprite.on("pointerover", (e: PIXI.FederatedPointerEvent) => {
-      const noteData = sprite.noteData;
-      if (noteData) pianoRoll.showNoteTooltip(noteData, e);
-    });
-
-    sprite.on("pointermove", (e: PIXI.FederatedPointerEvent) => pianoRoll.moveTooltip(e));
-
-    sprite.on("pointerout", () => pianoRoll.hideTooltip());
+    // Use the extracted NoteSprite class which sets up pointer handlers
+    const sprite = new NoteSpriteClass(baseTexture, pianoRoll);
     pianoRoll.notesContainer.addChild(sprite);
     pianoRoll.noteSprites.push(sprite);
     // Ensure hatch overlay pool matches sprite pool
@@ -355,39 +342,114 @@ function handleSprites(pianoRoll: PianoRoll, baseTexture: PIXI.Texture<PIXI.Buff
     pianoRoll.notesContainer.addChild(overlay);
     hatchSprites.push(overlay);
   }
-  while (pianoRoll.noteSprites.length > pianoRoll.notes.length) {
-    const s = pianoRoll.noteSprites.pop();
-    if (s) {
-      pianoRoll.notesContainer.removeChild(s);
-      s.destroy();
+   while (pianoRoll.noteSprites.length > pianoRoll.notes.length) {
+     const s = pianoRoll.noteSprites.pop();
+     if (s) {
+       pianoRoll.notesContainer.removeChild(s);
+       s.destroy();
+     }
+     const pr2 = pianoRoll as AugmentedPianoRoll;
+     const hatchSprites = pr2.hatchSprites as PIXI.TilingSprite[] | undefined;
+     const patternSprites = pr2.patternSprites as PIXI.TilingSprite[] | undefined;
+     if (patternSprites && patternSprites.length > pianoRoll.noteSprites.length) {
+       const p = patternSprites.pop();
+       if (p) {
+         pianoRoll.notesContainer.removeChild(p);
+         p.destroy();
+       }
+     }
+     if (hatchSprites && hatchSprites.length > pianoRoll.noteSprites.length) {
+       const o = hatchSprites.pop();
+       if (o) {
+         pianoRoll.notesContainer.removeChild(o);
+         o.destroy();
+       }
+     }
+     const onsetSprites = pr2.onsetSprites as PIXI.Sprite[] | undefined;
+     if (onsetSprites && onsetSprites.length > pianoRoll.noteSprites.length) {
+       const m = onsetSprites.pop();
+       if (m) {
+         pianoRoll.notesContainer.removeChild(m);
+         m.destroy();
+       }
+     }
+     // onsetOutlineSprites are no longer used
+   }
+}
+
+function renderPianoNote(pianoRoll: PianoRoll, idx: number, note: NoteData, pianoKeysOffset: number, zoomY: number, baseRowHeight: number) {
+  const sprite = pianoRoll.noteSprites[idx] as NoteSpriteClass;
+  // Compute geometry once; container pan is applied globally elsewhere.
+  const x = pianoRoll.timeScale(note.time) * pianoRoll.state.zoomX + pianoKeysOffset;
+  const yBase = pianoRoll.pitchScale(note.midi);
+  const canvasMid = pianoRoll.options.height / 2;
+  const y = (yBase - canvasMid) * zoomY + canvasMid;
+  const width = pianoRoll.timeScale(note.duration) * pianoRoll.state.zoomX;
+  const height = Math.max(1, baseRowHeight * 0.8 * zoomY);
+
+  // Use the NoteSprite helper to assign geometry
+  sprite.updateGeometry(x, y - height / 2, width, height);
+
+  // Color and alpha ---------------------------------
+  const noteColor = pianoRoll.options.noteRenderer
+    ? pianoRoll.options.noteRenderer(note, idx)
+    : pianoRoll.options.noteColor;
+
+  // Store current note data on the sprite for tooltip access
+  sprite.noteData = note;
+
+  // Apply transparency only for GRAY notes to avoid overly dark appearance
+  // The neutral gray used across evaluation/highlight modes is 0x444444.
+  const NEUTRAL_GRAY_NOTE = 0x444444;
+  const alpha = noteColor === NEUTRAL_GRAY_NOTE ? 0.5 : 1;
+
+  // Apply additive blending when the global highlight mode requests it
+  let augmentedPianoRoll = pianoRoll as AugmentedPianoRoll;
+  const hl = augmentedPianoRoll.highlightMode ?? "file";
+  const blend = hl === "highlight-blend" ? "add" : "normal";
+  sprite.applyStyle(noteColor, alpha, blend);
+
+  // Onset marker positioning -----------------------------------------
+  const showOnsets = augmentedPianoRoll.showOnsetMarkers;
+  const onsetSprites = augmentedPianoRoll.onsetSprites ??= [];
+  const onsetSprite = onsetSprites[idx];
+  const originalOnsetMap = augmentedPianoRoll.originalOnsetMap;
+  const onlyOriginal = augmentedPianoRoll.onlyOriginalOnsets !== false;
+  if (!onsetSprite) return;
+  if (!showOnsets) return onsetSprite.visible = false;
+  const fid = note.fileId || "";
+  // Outline color near file’s base color; fall back to current note color
+  const fileColors = augmentedPianoRoll.fileColors;
+  const baseColorNum = fileColors?.[fid] ?? noteColor;
+  const colorHex = "#" + baseColorNum.toString(16).padStart(6, "0");
+  const onsetStyles = augmentedPianoRoll.onsetStyles || {};
+  const style = onsetStyles[fid] || { shape: "circle", variant: "filled", size: 12, strokeWidth: 2 };
+  // Only show marker for the original MIDI onset (avoid per-fragment markers)
+  if (onlyOriginal && originalOnsetMap) {
+    const key = `${fid}#${note.sourceIndex ?? -1}`;
+    const origT = originalOnsetMap[key];
+    if (origT === undefined || Math.abs(origT - note.time) > 1e-6) {
+      onsetSprite.visible = false;
+      return; // skip drawing marker for segmented fragments
     }
-    const pr2 = pianoRoll as AugmentedPianoRoll;
-    const hatchSprites = pr2.hatchSprites as PIXI.TilingSprite[] | undefined;
-    const patternSprites = pr2.patternSprites as PIXI.TilingSprite[] | undefined;
-    if (patternSprites && patternSprites.length > pianoRoll.noteSprites.length) {
-      const p = patternSprites.pop();
-      if (p) {
-        pianoRoll.notesContainer.removeChild(p);
-        p.destroy();
-      }
-    }
-    if (hatchSprites && hatchSprites.length > pianoRoll.noteSprites.length) {
-      const o = hatchSprites.pop();
-      if (o) {
-        pianoRoll.notesContainer.removeChild(o);
-        o.destroy();
-      }
-    }
-    const onsetSprites = pr2.onsetSprites as PIXI.Sprite[] | undefined;
-    if (onsetSprites && onsetSprites.length > pianoRoll.noteSprites.length) {
-      const m = onsetSprites.pop();
-      if (m) {
-        pianoRoll.notesContainer.removeChild(m);
-        m.destroy();
-      }
-    }
-    // onsetOutlineSprites are no longer used
   }
+  // Render as original shape marker with per-file stable kind
+  onsetSprite.texture = getOnsetTextureByStyle(style as OnsetMarkerStyle, colorHex);
+  onsetSprite.tint = 0xffffff; // no extra tint; texture carries stroke color
+  onsetSprite.blendMode = "normal";
+  onsetSprite.alpha = 0.95;
+  // Size adapts to vertical zoom: scale preferred size by zoomY,
+  // but never exceed the current row height (leave small padding)
+  const preferred = Math.max(8, style.size || 12);
+  const maxByRow = Math.max(6, Math.floor(height * 0.9));
+  const target = preferred * zoomY;
+  const sz = Math.max(6, Math.min(maxByRow, Math.floor(target)));
+  onsetSprite.width = sz;
+  onsetSprite.height = sz;
+  onsetSprite.x = sprite.x - sz / 2; // at note start
+  onsetSprite.y = sprite.y + height / 2 - sz / 2;
+  onsetSprite.visible = true;
+  onsetSprite.zIndex = (sprite.zIndex || 0) + 5;
 }
 
 /**
@@ -419,81 +481,5 @@ export function renderNotes(pianoRoll: PianoRoll): void {
 
 
   // 2) Update transform & style ------------------------------------------
-  pianoRoll.notes.forEach((note: NoteData, idx: number) => {
-    const sprite = pianoRoll.noteSprites[idx] as NoteSprite;
-    // Compute geometry once; container pan is applied globally elsewhere.
-    const x = pianoRoll.timeScale(note.time) * pianoRoll.state.zoomX + pianoKeysOffset;
-    const yBase = pianoRoll.pitchScale(note.midi);
-    const canvasMid = pianoRoll.options.height / 2;
-    const y = (yBase - canvasMid) * zoomY + canvasMid;
-    const width = pianoRoll.timeScale(note.duration) * pianoRoll.state.zoomX;
-    const height = Math.max(1, baseRowHeight * 0.8 * zoomY);
-
-    sprite.x = x;
-    sprite.y = y - height / 2;
-    sprite.width = width;
-    sprite.height = height;
-
-    // Color and alpha ---------------------------------
-    const noteColor = pianoRoll.options.noteRenderer
-      ? pianoRoll.options.noteRenderer(note, idx)
-      : pianoRoll.options.noteColor;
-
-    sprite.tint = noteColor;
-
-    // Store current note data on the sprite for tooltip access
-    sprite.noteData = note;
-
-    // Apply transparency only for GRAY notes to avoid overly dark appearance
-    // The neutral gray used across evaluation/highlight modes is 0x444444.
-    const NEUTRAL_GRAY_NOTE = 0x444444;
-    sprite.alpha = noteColor === NEUTRAL_GRAY_NOTE ? 0.5 : 1;
-
-    // Apply additive blending when the global highlight mode requests it
-    let augmentedPianoRoll = pianoRoll as AugmentedPianoRoll;
-    const hl = augmentedPianoRoll.highlightMode ?? "file";
-    sprite.blendMode = hl === "highlight-blend" ? "add" : "normal";
-
-    // Onset marker positioning -----------------------------------------
-    const showOnsets = augmentedPianoRoll.showOnsetMarkers;
-    const onsetSprites = augmentedPianoRoll.onsetSprites ??= [];
-    const onsetSprite = onsetSprites[idx];
-    const originalOnsetMap = augmentedPianoRoll.originalOnsetMap;
-    const onlyOriginal = augmentedPianoRoll.onlyOriginalOnsets !== false;
-    if (!onsetSprite) return;
-    if (!showOnsets) return onsetSprite.visible = false;
-    const fid = note.fileId || "";
-    // Outline color near file’s base color; fall back to current note color
-    const fileColors = augmentedPianoRoll.fileColors;
-    const baseColorNum = fileColors?.[fid] ?? noteColor;
-    const colorHex = "#" + baseColorNum.toString(16).padStart(6, "0");
-    const onsetStyles = augmentedPianoRoll.onsetStyles || {};
-    const style = onsetStyles[fid] || { shape: "circle", variant: "filled", size: 12, strokeWidth: 2 };
-    // Only show marker for the original MIDI onset (avoid per-fragment markers)
-    if (onlyOriginal && originalOnsetMap) {
-      const key = `${fid}#${note.sourceIndex ?? -1}`;
-      const origT = originalOnsetMap[key];
-      if (origT === undefined || Math.abs(origT - note.time) > 1e-6) {
-        onsetSprite.visible = false;
-        return; // skip drawing marker for segmented fragments
-      }
-    }
-    // Render as original shape marker with per-file stable kind
-    onsetSprite.texture = getOnsetTextureByStyle(style as OnsetMarkerStyle, colorHex);
-    onsetSprite.tint = 0xffffff; // no extra tint; texture carries stroke color
-    onsetSprite.blendMode = "normal";
-    onsetSprite.alpha = 0.95;
-    // Size adapts to vertical zoom: scale preferred size by zoomY,
-    // but never exceed the current row height (leave small padding)
-    const preferred = Math.max(8, style.size || 12);
-    const maxByRow = Math.max(6, Math.floor(height * 0.9));
-    const target = preferred * zoomY;
-    const sz = Math.max(6, Math.min(maxByRow, Math.floor(target)));
-    onsetSprite.width = sz;
-    onsetSprite.height = sz;
-    onsetSprite.x = sprite.x - sz / 2; // at note start
-    onsetSprite.y = sprite.y + height / 2 - sz / 2;
-    onsetSprite.visible = true;
-    onsetSprite.zIndex = (sprite.zIndex || 0) + 5;
-  });
+  pianoRoll.notes.forEach((note: NoteData, idx: number) => renderPianoNote(pianoRoll, idx, note, pianoKeysOffset, zoomY, baseRowHeight));
 }

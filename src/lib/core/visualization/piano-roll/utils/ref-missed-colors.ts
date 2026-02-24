@@ -9,6 +9,7 @@
 
 import { getContrastingGray, hexToRgb } from "@/lib/core/visualization/color-utils";
 import { NoteData } from "@/lib/core/utils/midi/types";
+import { ColorCalculator } from "@/core/visualization/piano-roll/utils/color-calculator";
 
 /**
  * Get the appropriate color for a note in ref-missed mode
@@ -40,7 +41,7 @@ export function getRefMissedColor(
   const grayHex = getContrastingGray(refHex, 3.5); // Higher contrast for better visibility
   
   // Convert back to number for PIXI
-  return toNumberColor(grayHex);
+  return ColorCalculator.hexToNumber(grayHex);
 }
 
 /**
@@ -109,7 +110,7 @@ export function getCachedContrastingGray(refColor: number): number {
   
   const refHex = "#" + refColor.toString(16).padStart(6, "0");
   const grayHex = getContrastingGray(refHex, 3.5);
-  const grayNum = toNumberColor(grayHex);
+  const grayNum = ColorCalculator.hexToNumber(grayHex);
   
   contrastCache.set(refColor, grayNum);
   return grayNum;

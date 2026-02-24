@@ -10,6 +10,7 @@ import { SamplerManager } from "../managers/sampler-manager";
 import { WavPlayerManager } from "../managers/wav-player-manager";
 import { TransportSyncManager } from "../managers/transport-sync-manager";
 import { LoopManager } from "../managers/loop-manager";
+import { getWaveRollAudioAPI } from "@/core/waveform/register";
 
 export interface PlaybackControllerDeps {
   state: AudioPlayerState;

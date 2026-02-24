@@ -4,69 +4,6 @@
 
 import type { PianoRoll } from '../piano-roll';
 
-export interface CoordinateTransform {
-  timeToPixel(time: number): number;
-  pixelToTime(pixel: number): number;
-  pitchToPixel(pitch: number): number;
-  pixelToPitch(pixel: number): number;
-  getPianoKeysOffset(): number;
-  getPixelsPerSecond(): number;
-}
-
-/**
- * Create a coordinate transformer for a piano roll instance
- */
-export function createCoordinateTransform(pianoRoll: PianoRoll): CoordinateTransform {
-  return {
-    /**
-     * Convert time to pixel position
-     */
-    timeToPixel(time: number): number {
-      const pianoKeysOffset = pianoRoll.options.showPianoKeys ? 60 : 0;
-      return pianoRoll.timeScale(time) * pianoRoll.state.zoomX + pianoKeysOffset;
-    },
-
-    /**
-     * Convert pixel position to time
-     */
-    pixelToTime(pixel: number): number {
-      const pianoKeysOffset = pianoRoll.options.showPianoKeys ? 60 : 0;
-      return pianoRoll.timeScale.invert((pixel - pianoKeysOffset) / pianoRoll.state.zoomX);
-    },
-
-    /**
-     * Convert pitch to pixel position
-     */
-    pitchToPixel(pitch: number): number {
-      return pianoRoll.pitchScale(pitch) * pianoRoll.state.zoomY;
-    },
-
-    /**
-     * Convert pixel position to pitch
-     */
-    pixelToPitch(pixel: number): number {
-      return pianoRoll.pitchScale.invert(pixel / pianoRoll.state.zoomY);
-    },
-
-    /**
-     * Get the piano keys offset
-     */
-    getPianoKeysOffset(): number {
-      return pianoRoll.options.showPianoKeys ? 60 : 0;
-    },
-
-    /**
-     * Get pixels per second
-     */
-    getPixelsPerSecond(): number {
-      return pianoRoll.timeScale(1) * pianoRoll.state.zoomX;
-    }
-  };
-}
-
-/**
- * Calculate visible time range in the viewport
- */
 export interface ViewportBounds {
   timeStart: number;
   timeEnd: number;
@@ -75,45 +12,95 @@ export interface ViewportBounds {
 }
 
 /**
- * Get the visible time range for the current viewport
+ * Coordinate transformer for piano roll visualization
  */
-export function getVisibleTimeRange(pianoRoll: PianoRoll): ViewportBounds {
-  const pianoKeysOffset = pianoRoll.options.showPianoKeys ? 60 : 0;
-  const transform = createCoordinateTransform(pianoRoll);
-  
-  const timeStart = Math.max(
-    0,
-    pianoRoll.timeScale.invert(
-      (-pianoRoll.state.panX - pianoKeysOffset) / pianoRoll.state.zoomX
-    )
-  );
-  
-  const timeEnd = Math.min(
-    pianoRoll.timeScale.domain()[1],
-    pianoRoll.timeScale.invert(
-      (pianoRoll.options.width - pianoKeysOffset - pianoRoll.state.panX) / pianoRoll.state.zoomX
-    )
-  );
-  
-  return {
-    timeStart,
-    timeEnd,
-    pixelStart: transform.timeToPixel(timeStart),
-    pixelEnd: transform.timeToPixel(timeEnd)
-  };
-}
+export class CoordinateTransform {
+  constructor(private pianoRoll: PianoRoll) {}
 
-/**
- * Check if a time position is within the viewport
- */
-export function isTimeInViewport(time: number, pianoRoll: PianoRoll): boolean {
-  const bounds = getVisibleTimeRange(pianoRoll);
-  return time >= bounds.timeStart && time <= bounds.timeEnd;
-}
+  /**
+   * Convert time to pixel position
+   */
+  timeToPixel(time: number): number {
+    const pianoKeysOffset = this.getPianoKeysOffset();
+    return this.pianoRoll.timeScale(time) * this.pianoRoll.state.zoomX + pianoKeysOffset;
+  }
 
-/**
- * Check if a pixel position is within the viewport
- */
-export function isPixelInViewport(x: number, pianoRoll: PianoRoll, margin: number = 10): boolean {
-  return x >= -margin && x <= pianoRoll.options.width + margin;
+  /**
+   * Convert pixel position to time
+   */
+  pixelToTime(pixel: number): number {
+    const pianoKeysOffset = this.getPianoKeysOffset();
+    return this.pianoRoll.timeScale.invert((pixel - pianoKeysOffset) / this.pianoRoll.state.zoomX);
+  }
+
+  /**
+   * Convert pitch to pixel position
+   */
+  pitchToPixel(pitch: number): number {
+    return this.pianoRoll.pitchScale(pitch) * this.pianoRoll.state.zoomY;
+  }
+
+  /**
+   * Convert pixel position to pitch
+   */
+  pixelToPitch(pixel: number): number {
+    return this.pianoRoll.pitchScale.invert(pixel / this.pianoRoll.state.zoomY);
+  }
+
+  /**
+   * Get the piano keys offset
+   */
+  getPianoKeysOffset(): number {
+    return this.pianoRoll.options.showPianoKeys ? 60 : 0;
+  }
+
+  /**
+   * Get pixels per second
+   */
+  getPixelsPerSecond(): number {
+    return this.pianoRoll.timeScale(1) * this.pianoRoll.state.zoomX;
+  }
+
+  /**
+   * Get the visible time range for the current viewport
+   */
+  getVisibleTimeRange(): ViewportBounds {
+    const pianoKeysOffset = this.getPianoKeysOffset();
+    
+    const timeStart = Math.max(
+      0,
+      this.pianoRoll.timeScale.invert(
+        (-this.pianoRoll.state.panX - pianoKeysOffset) / this.pianoRoll.state.zoomX
+      )
+    );
+    
+    const timeEnd = Math.min(
+      this.pianoRoll.timeScale.domain()[1],
+      this.pianoRoll.timeScale.invert(
+        (this.pianoRoll.options.width - pianoKeysOffset - this.pianoRoll.state.panX) / this.pianoRoll.state.zoomX
+      )
+    );
+    
+    return {
+      timeStart,
+      timeEnd,
+      pixelStart: this.timeToPixel(timeStart),
+      pixelEnd: this.timeToPixel(timeEnd)
+    };
+  }
+
+  /**
+   * Check if a time position is within the viewport
+   */
+  isTimeInViewport(time: number): boolean {
+    const bounds = this.getVisibleTimeRange();
+    return time >= bounds.timeStart && time <= bounds.timeEnd;
+  }
+
+  /**
+   * Check if a pixel position is within the viewport
+   */
+  isPixelInViewport(x: number, margin: number = 10): boolean {
+    return x >= -margin && x <= this.pianoRoll.options.width + margin;
+  }
 }

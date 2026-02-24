@@ -8,8 +8,8 @@ import type { PianoRollConfig } from "../types";
  * and feed it back on the next call to preserve spacing.
  */
 export interface Scales {
-  timeScale: ScaleLinear<number, number>;
-  pitchScale: ScaleLinear<number, number>;
+  timeScale: ScaleLinear;
+  pitchScale: ScaleLinear;
   pxPerSecond: number;
 }
 

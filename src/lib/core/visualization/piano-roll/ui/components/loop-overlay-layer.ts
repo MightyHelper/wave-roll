@@ -1,6 +1,6 @@
 import * as PIXI from "pixi.js";
 import type { PianoRoll } from "../../piano-roll";
-import { createCoordinateTransform, ColorCalculator, DrawingPrimitives, textCache } from "../../utils";
+import { ColorCalculator, DrawingPrimitives, textCache } from "../../utils";
 import { COLOR_LOOP_LINE_A, COLOR_LOOP_LINE_B, COLOR_LOOP_SHADE } from "@/lib/core/constants";
 
 /**
@@ -34,7 +34,6 @@ export class LoopOverlayLayer extends PIXI.Container {
   }
 
   public render(pr: PianoRoll): void {
-    createCoordinateTransform(pr);
     // Clear previous
     this.labelContainer.removeChildren();
     this.overlay.clear();

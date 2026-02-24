@@ -57,7 +57,11 @@ export class CompositeTimelineLayer extends PIXI.Container {
       if (this.renderTexture) {
         this.renderTexture.destroy(true);
       }
-      this.renderTexture = PIXI.RenderTexture.create({ width: pr.options.width, height: usableHeight, resolution: pr.app.renderer.resolution });
+      this.renderTexture = PIXI.RenderTexture.create({
+        width: pr.options.width,
+        height: usableHeight,
+        resolution: pr.app.renderer.resolution
+      });
       this.sprite.texture = this.renderTexture;
       this.sprite.x = 0;
       this.sprite.y = 0;
@@ -75,10 +79,9 @@ export class CompositeTimelineLayer extends PIXI.Container {
 
     // Determine whether we must re-render the offscreen buffer
     const mustRedraw =
-      // @ts-expect-error access private flag during migration
       pr.needsNotesRedraw ||
-      (pr as any).needsSustainRedraw ||
-      (pr as any)._compositeForceRedraw === true ||
+      pr.needsSustainRedraw ||
+      pr._compositeForceRedraw ||
       this.lastZoomX !== pr.state.zoomX ||
       this.lastZoomY !== pr.state.zoomY ||
       this.lastWidth !== pr.options.width ||
@@ -97,8 +100,8 @@ export class CompositeTimelineLayer extends PIXI.Container {
       this.lastZoomY = pr.state.zoomY;
       this.lastWidth = pr.options.width;
       // height already set in ensureRenderTexture
-      if ((pr as any)._compositeForceRedraw) {
-        (pr as any)._compositeForceRedraw = false;
+      if (pr._compositeForceRedraw) {
+        pr._compositeForceRedraw = false;
       }
     }
 

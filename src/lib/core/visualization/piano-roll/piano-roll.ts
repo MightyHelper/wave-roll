@@ -12,7 +12,7 @@ import { pinchStart, pinchMove, pinchEnd } from "@/lib/core/visualization/piano-
 // Playhead is now handled by PlayheadLayer when available
 import { renderPlayhead } from "@/lib/core/visualization/piano-roll/renderers/playhead";
 // Background grid/waveform/loop overlays are now handled by BackgroundLayer component
-import { renderNotes } from "@/lib/core/visualization/piano-roll/renderers/notes";
+import { NoteSprite, renderNotes } from "@/lib/core/visualization/piano-roll/renderers/notes";
 import { renderSustains } from "@/lib/core/visualization/piano-roll/renderers/sustains";
 import { initializeTooltipOverlay } from "@/lib/core/visualization/piano-roll/ui/overlays";
 import {
@@ -25,7 +25,12 @@ import { drawOverlapRegions } from "@/core/visualization/piano-roll/renderers/ov
 import { NoteInterval } from "@/lib/core/controls/utils/overlap";
 import type { FileInfoMap } from "./types-internal";
 import { initializeContainers } from "@/lib/core/visualization/piano-roll/ui/containers";
-// (Note) Evaluation utilities removed - no longer required here
+import { CompositeTimelineLayer } from "@/core/visualization/piano-roll/ui/components/composite-timeline-layer";
+import { PlayheadLayer } from "@/core/visualization/piano-roll/ui/components/playhead-layer";
+import { BackgroundLayer } from "@/core/visualization/piano-roll/ui/components/background-layer";
+import { LoopOverlayLayer } from "@/core/visualization/piano-roll/ui/components/loop-overlay-layer";
+import { NotesLayer } from "@/core/visualization/piano-roll/ui/components/notes-layer";
+import { SustainLayer } from "@/core/visualization/piano-roll/ui/components/sustain-layer";
 
 export class PianoRoll {
   public app: PIXI.Application;
@@ -61,7 +66,7 @@ export class PianoRoll {
    * legacy Graphics renderer that can still be enabled manually. Only one of
    * the two arrays is populated at any given time.
    */
-  public noteSprites: PIXI.Sprite[] = [];
+  public noteSprites: NoteSprite[] = [];
   public state: PianoRollViewState;
   public options: Required<PianoRollConfig>;
 
@@ -73,8 +78,16 @@ export class PianoRoll {
    * individual note each frame, so we can skip heavy redraw work when this
    * flag is `false`.
    */
-  private needsNotesRedraw: boolean = true;
-  private needsSustainRedraw: boolean = true;
+  needsNotesRedraw: boolean = true;
+  needsSustainRedraw: boolean = true;
+
+  public _compositeTimelineLayer!: CompositeTimelineLayer
+  public _playheadLayer!: PlayheadLayer
+  public _backgroundLayer!: BackgroundLayer
+  public _loopOverlayLayer!: LoopOverlayLayer
+  public _notesLayer!: NotesLayer
+  public _sustainLayer!: SustainLayer
+  public _compositeForceRedraw!: boolean
 
   // Scales for coordinate transformation
   public timeScale!: ScaleLinear;
@@ -486,7 +499,7 @@ export class PianoRoll {
 
     // Update mask for notes/sustains prior to drawing (legacy path only).
     // When using the composite offscreen layer we avoid runtime masks entirely.
-    const hasComposite = Boolean((this as any)._compositeTimelineLayer?.render);
+    const hasComposite = Boolean(this._compositeTimelineLayer?.render);
     if (!hasComposite) {
       const bandPadding = 6;
       const bandHeight = Math.max(
@@ -501,19 +514,19 @@ export class PianoRoll {
     }
 
     // Playhead via component if available (fallback to legacy renderer otherwise)
-    if ((this as any)._playheadLayer?.render) {
-      (this as any)._playheadLayer.render(this);
+    if (this._playheadLayer?.render) {
+      this._playheadLayer.render(this);
     } else {
       renderPlayhead(this);
     }
     // Delegate background rendering to component created in initializeContainers()
-    if ((this as any)._backgroundLayer?.render) {
-      (this as any)._backgroundLayer.render(this);
+    if (this._backgroundLayer?.render) {
+      this._backgroundLayer.render(this);
     }
 
     // Loop overlay (A/B lines and shade)
-    if ((this as any)._loopOverlayLayer?.render) {
-      (this as any)._loopOverlayLayer.render(this);
+    if (this._loopOverlayLayer?.render) {
+      this._loopOverlayLayer.render(this);
     }
 
     // Only re-generate note geometry when required; otherwise we simply shift
@@ -522,8 +535,8 @@ export class PianoRoll {
     const hadNotesRedraw = this.needsNotesRedraw;
     if (hadNotesRedraw) {
       // Prefer component-based rendering when available
-      if ((this as any)._notesLayer?.render) {
-        (this as any)._notesLayer.render(this);
+      if (this._notesLayer?.render) {
+        this._notesLayer.render(this);
       } else {
         renderNotes(this);
       }
@@ -533,18 +546,18 @@ export class PianoRoll {
     // Prefer component-based sustain overlay rendering
     const hadSustainRedraw = this.needsSustainRedraw;
     if (hadSustainRedraw) {
-      if ((this as any)._sustainLayer?.render) {
-        (this as any)._sustainLayer.render(this);
+      if (this._sustainLayer?.render) {
+        this._sustainLayer.render(this);
       } else {
         renderSustains(this);
       }
     }
 
     // Render composite timeline (notes + sustain + overlaps) offscreen and blit
-    if ((this as any)._compositeTimelineLayer?.render) {
+    if (this._compositeTimelineLayer?.render) {
       // Signal composite to redraw when this frame modified staging contents
-      (this as any)._compositeForceRedraw = hadNotesRedraw || hadSustainRedraw;
-      (this as any)._compositeTimelineLayer.render(this);
+      this._compositeForceRedraw = hadNotesRedraw || hadSustainRedraw;
+      this._compositeTimelineLayer.render(this);
     } else {
       // Legacy path: apply pan only; zoom encoded in regenerated geometry
       this.notesContainer.position.set(this.state.panX, this.state.panY);
@@ -564,7 +577,7 @@ export class PianoRoll {
     
     if (renderTime > 16) { // More than one frame
       this.performanceMetrics.slowRenders++;
-      console.warn(`[PianoRoll] Slow render: ${renderTime.toFixed(2)}ms`);
+      // console.warn(`[PianoRoll] Slow render: ${renderTime.toFixed(2)}ms`);
     }
     
     // Log every 100 renders

@@ -3,7 +3,7 @@ import { COLOR_WAVEFORM } from "@/lib/core/constants";
 import type { PeakDatum, RegisteredAudio } from "./types";
 import { toNumberColor } from "@/components/player/wave-roll/evaluation/colors";
 
-class WaveRollAudioAPI {
+export class WaveRollAudioAPI {
   private items: RegisteredAudio[] = [];
 
   getFiles(): RegisteredAudio[] {

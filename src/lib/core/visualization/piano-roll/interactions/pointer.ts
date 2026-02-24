@@ -28,7 +28,7 @@ export function onPointerMove(
   const deltaX = pos.x - pianoRoll.state.lastPointerPos.x;
   const deltaY = pos.y - pianoRoll.state.lastPointerPos.y;
 
-  const altPressed = (event as MouseEvent).altKey === true;
+  const altPressed = (event as MouseEvent).altKey;
 
   if (altPressed) {
     // Only vertical panning when Alt/Option is held.
@@ -52,13 +52,11 @@ export function onPointerMove(
   pianoRoll.state.currentTime = pianoRoll.computeTimeAtPlayhead();
   // Notify listeners continuously while dragging so progress UI scrubs in real-time,
   // but throttle to ~30fps to avoid excessive external work during drag.
-  if (pianoRoll.onTimeChangeCallback) {
-    const now = performance.now();
-    const last = lastEmitTs.get(pianoRoll) ?? 0;
-    if (now - last >= EMIT_INTERVAL_MS) {
-      lastEmitTs.set(pianoRoll, now);
-      pianoRoll.onTimeChangeCallback(pianoRoll.state.currentTime);
-    }
+  const now = performance.now();
+  const last = lastEmitTs.get(pianoRoll) ?? 0;
+  if (now - last >= EMIT_INTERVAL_MS) {
+    lastEmitTs.set(pianoRoll, now);
+    pianoRoll.onTimeChangeCallback?.(pianoRoll.state.currentTime);
   }
 
   pianoRoll.requestRender();
@@ -70,7 +68,7 @@ export function onPointerUp(
 ): void {
   // Only commit if we were actually panning (dragging). This prevents
   // unintended seeks on mere hover + mouseleave without a drag.
-  const wasPanning = pianoRoll.state.isPanning === true;
+  const wasPanning = pianoRoll.state.isPanning;
   pianoRoll.state.isPanning = false;
 
   if (!wasPanning) {

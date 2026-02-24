@@ -1,9 +1,9 @@
 import { NoteData, ControlChangeEvent } from "@/lib/midi/types";
-import { PianoRollConfig, PianoRollInstance as PianoRollInstanceType } from "./types";
+import { PianoRollConfig } from "./types";
 import { PianoRoll } from "./piano-roll";
 import { NoteInterval } from "@/lib/core/controls/utils/overlap";
 
-class PianoRollInstance implements PianoRollInstanceType {
+class PianoRollInstance {
   private pianoRoll: PianoRoll;
   private resizeObserver: ResizeObserver;
   public _instance: PianoRoll;
@@ -12,6 +12,7 @@ class PianoRollInstance implements PianoRollInstanceType {
     this.pianoRoll = pianoRoll;
     this._instance = pianoRoll;
     this.resizeObserver = new ResizeObserver((entries) => {
+      console.debug("Resizing piano roll")
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         if (width > 0 && height > 0) {
